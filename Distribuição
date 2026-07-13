@@ -1,0 +1,2690 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doca — Forecast e Receção de Stock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg: #FAF7F2;
+  --bg-panel: #FFFFFF;
+  --ink: #1F2B22;
+  --ink-soft: #5B6B5C;
+  --line: #E3DCCF;
+  --line-soft: #EEE8DC;
+  --action: #3D5A40;
+  --action-dark: #2C4330;
+  --action-soft: #E7EEE3;
+  --critical: #B5482E;
+  --critical-soft: #F7E4DD;
+  --warn: #C08A2E;
+  --warn-soft: #F6EBD6;
+  --ok: #4F7A52;
+  --ok-soft: #E7F0E5;
+  --gold: #C08A2E;
+  --shadow: 0 1px 2px rgba(31,43,34,0.04), 0 4px 16px rgba(31,43,34,0.06);
+  --radius: 10px;
+  --font-display: 'Fraunces', serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{background:var(--bg); color:var(--ink); font-family:var(--font-body); -webkit-font-smoothing:antialiased;}
+body{min-height:100vh; display:flex;}
+
+::selection{background:var(--action-soft); color:var(--action-dark);}
+
+a{color:inherit;}
+
+/* ---------- Layout shell ---------- */
+.app{display:flex; width:100%; min-height:100vh;}
+
+.sidebar{
+  width:248px; flex-shrink:0;
+  background:var(--action-dark);
+  color:#F2EFE6;
+  display:flex; flex-direction:column;
+  padding:28px 18px;
+  position:sticky; top:0; height:100vh;
+}
+.brand{
+  font-family:var(--font-display);
+  font-size:21px; font-weight:600;
+  letter-spacing:0.01em;
+  color:#fff;
+  margin-bottom:2px;
+  display:flex; align-items:baseline; gap:8px;
+}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--gold); display:inline-block;}
+.brand-sub{
+  font-size:11.5px; color:#C7D2C3; letter-spacing:0.04em; text-transform:uppercase;
+  margin-bottom:34px; padding-left:16px;
+}
+.nav{display:flex; flex-direction:column; gap:3px;}
+.nav-item{
+  display:flex; align-items:center; gap:11px;
+  padding:11px 14px; border-radius:8px;
+  font-size:14.5px; font-weight:500;
+  color:#D7DECF; cursor:pointer;
+  transition:background 0.15s ease, color 0.15s ease;
+  border:none; background:none; text-align:left; width:100%;
+  font-family:var(--font-body);
+}
+.nav-item:hover{background:rgba(255,255,255,0.07); color:#fff;}
+.nav-item.active{background:#F2EFE6; color:var(--action-dark); font-weight:600;}
+.nav-item .num{
+  font-family:var(--font-mono); font-size:11px; opacity:0.6; width:16px;
+}
+.nav-item.active .num{opacity:0.45;}
+.nav-divider{height:1px; background:rgba(255,255,255,0.12); margin:18px 4px;}
+
+.sidebar-footer{margin-top:auto; padding-top:18px;}
+.sidebar-footer .meta{font-size:11.5px; color:#9AAA94; line-height:1.6;}
+.sidebar-footer button{
+  margin-top:12px; width:100%; padding:9px 12px;
+  background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14);
+  border-radius:8px; color:#E7E2D4; font-size:12.5px; cursor:pointer;
+  font-family:var(--font-body); transition:background 0.15s;
+}
+.sidebar-footer button:hover{background:rgba(255,255,255,0.12);}
+
+.main{flex:1; min-width:0; padding:36px 44px 60px; max-width:1440px;}
+
+/* ---------- Typography helpers ---------- */
+.page-title{font-family:var(--font-display); font-size:30px; font-weight:600; color:var(--ink); letter-spacing:-0.01em;}
+.page-sub{font-size:14px; color:var(--ink-soft); margin-top:5px; line-height:1.5;}
+.eyebrow{font-size:11.5px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-soft);}
+
+/* ---------- Dock / upload screen ---------- */
+.dock-screen{
+  min-height:100vh; width:100%;
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(circle at 18% 15%, rgba(61,90,64,0.07), transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(192,138,46,0.08), transparent 45%),
+    var(--bg);
+  padding:40px 24px;
+}
+.dock-card{
+  max-width:760px; width:100%;
+}
+.dock-mark{
+  display:flex; align-items:center; gap:10px; margin-bottom:28px; justify-content:center;
+}
+.dock-mark .dot{width:9px;height:9px;border-radius:50%;background:var(--action);}
+.dock-mark span{font-family:var(--font-mono); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-soft);}
+
+.dock-title{
+  font-family:var(--font-display); font-size:42px; font-weight:600;
+  text-align:center; line-height:1.12; letter-spacing:-0.01em; color:var(--ink);
+  margin-bottom:14px;
+}
+.dock-title em{font-style:italic; color:var(--action);}
+.dock-desc{
+  text-align:center; font-size:15px; color:var(--ink-soft); max-width:520px;
+  margin:0 auto 40px; line-height:1.6;
+}
+
+.bays{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:28px;}
+.bay{
+  background:var(--bg-panel); border:1.5px dashed var(--line);
+  border-radius:var(--radius); padding:28px 22px;
+  text-align:center; cursor:pointer; position:relative;
+  transition:border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+.bay:hover{border-color:var(--action); background:#FCFBF8; transform:translateY(-1px);}
+.bay.filled{border-style:solid; border-color:var(--ok); background:var(--ok-soft);}
+.bay.error{border-style:solid; border-color:var(--critical); background:var(--critical-soft);}
+.bay input{display:none;}
+.bay-icon{
+  width:46px; height:46px; margin:0 auto 14px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--action-soft); color:var(--action);
+}
+.bay.filled .bay-icon{background:var(--ok); color:#fff;}
+.bay.error .bay-icon{background:var(--critical); color:#fff;}
+.bay-label{font-weight:600; font-size:14.5px; margin-bottom:5px; color:var(--ink);}
+.bay-desc{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
+.bay-file{font-family:var(--font-mono); font-size:11.5px; color:var(--ok); margin-top:10px; word-break:break-all;}
+.bay-error-msg{font-family:var(--font-mono); font-size:11px; color:var(--critical); margin-top:10px; line-height:1.5;}
+
+.dock-cta{
+  display:block; width:100%; padding:15px 0; border:none; border-radius:9px;
+  background:var(--action); color:#fff; font-size:15px; font-weight:600;
+  font-family:var(--font-body); cursor:pointer;
+  transition:background 0.15s ease, opacity 0.15s ease;
+}
+.dock-cta:hover:not(:disabled){background:var(--action-dark);}
+.dock-cta:disabled{background:#D8D2C4; color:#9C9586; cursor:not-allowed;}
+
+.dock-cols{
+  margin-top:30px; padding-top:24px; border-top:1px solid var(--line-soft);
+  font-size:11.5px; color:var(--ink-soft); line-height:1.7; text-align:center;
+}
+.dock-cols b{color:var(--ink); font-weight:600;}
+.dock-privacy{
+  margin-top:16px; text-align:center; font-size:12px; color:var(--ink-soft);
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+
+/* ---------- Cards / generic panels ---------- */
+.grid{display:grid; gap:16px;}
+.kpi-grid{grid-template-columns:repeat(4, 1fr); margin:28px 0 32px;}
+.kpi-card{
+  background:var(--bg-panel); border:1px solid var(--line-soft); border-radius:var(--radius);
+  padding:18px 20px; box-shadow:var(--shadow);
+}
+.kpi-label{font-size:11.5px; color:var(--ink-soft); font-weight:600; letter-spacing:0.03em; text-transform:uppercase;}
+.kpi-value{font-family:var(--font-mono); font-size:28px; font-weight:600; color:var(--ink); margin-top:8px; letter-spacing:-0.01em;}
+.kpi-value.critical{color:var(--critical);}
+.kpi-value.action{color:var(--action);}
+.kpi-foot{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+
+.panel{
+  background:var(--bg-panel); border:1px solid var(--line-soft); border-radius:var(--radius);
+  box-shadow:var(--shadow); margin-bottom:22px; overflow:hidden;
+}
+.panel-head{
+  padding:18px 22px; border-bottom:1px solid var(--line-soft);
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;
+}
+.panel-title{font-family:var(--font-display); font-size:18px; font-weight:600;}
+.panel-desc{font-size:12.5px; color:var(--ink-soft); margin-top:3px;}
+.panel-body{padding:20px 22px;}
+
+/* status chips */
+.chip{
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:6px;
+  letter-spacing:0.01em;
+}
+.chip-critical{background:var(--critical-soft); color:var(--critical);}
+.chip-warn{background:var(--warn-soft); color:var(--warn);}
+.chip-ok{background:var(--ok-soft); color:var(--ok);}
+.chip-neutral{background:#EEEBE2; color:var(--ink-soft);}
+
+/* table */
+.table-wrap{overflow-x:auto;}
+table{width:100%; border-collapse:collapse; font-size:13px;}
+thead th{
+  text-align:left; padding:9px 12px; font-size:11px; font-weight:600;
+  color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em;
+  border-bottom:1.5px solid var(--line); white-space:nowrap; background:var(--bg-panel);
+  position:sticky; top:0;
+}
+thead th.num, td.num{text-align:right; font-family:var(--font-mono);}
+th.sortable-th{cursor:pointer; user-select:none;}
+th.sortable-th:hover{color:var(--ink);}
+th.sortable-th.sorted{color:var(--action-dark);}
+tbody td{padding:9px 12px; border-bottom:1px solid var(--line-soft); white-space:nowrap;}
+tbody tr:hover{background:#FBF9F4;}
+.row-loja{font-weight:600;}
+.muted{color:var(--ink-soft);}
+
+input.cell-input{
+  width:54px; padding:4px 6px; border:1px solid var(--line); border-radius:5px;
+  font-family:var(--font-mono); font-size:12.5px; text-align:center; color:var(--action-dark);
+  background:#FBF9F1;
+}
+input.cell-input:focus{outline:2px solid var(--action); outline-offset:1px; border-color:var(--action);}
+input.cell-input.edited{background:#FDF0DC; border-color:var(--gold); color:#8A5A12;}
+
+/* search/filter bar */
+.toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.search-input{
+  padding:8px 12px; border:1px solid var(--line); border-radius:7px; font-size:13px;
+  font-family:var(--font-body); min-width:220px; background:#fff;
+}
+.search-input:focus{outline:none; border-color:var(--action);}
+.filter-btn{
+  padding:7px 12px; border:1px solid var(--line); border-radius:7px; background:#fff;
+  font-size:12.5px; font-weight:500; cursor:pointer; color:var(--ink-soft);
+  font-family:var(--font-body); transition:all 0.15s;
+}
+.filter-btn.active{background:var(--action); color:#fff; border-color:var(--action);}
+.filter-btn:hover:not(.active){border-color:var(--action);}
+
+/* params */
+.param-grid{display:grid; grid-template-columns:1fr; gap:18px; max-width:620px;}
+.param-row{
+  display:flex; align-items:center; justify-content:space-between; gap:18px;
+  padding:16px 0; border-bottom:1px solid var(--line-soft);
+}
+.param-row:last-child{border-bottom:none;}
+.param-label{font-weight:600; font-size:14px;}
+.param-note{font-size:12px; color:var(--ink-soft); margin-top:3px; max-width:380px; line-height:1.5;}
+.param-control{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+.param-control input[type=number]{
+  width:80px; padding:9px 10px; border:1.5px solid var(--action); border-radius:7px;
+  font-family:var(--font-mono); font-size:15px; font-weight:600; text-align:center; color:var(--action-dark);
+  background:#FBF9F1;
+}
+.param-control input:focus{outline:2px solid var(--action-soft); outline-offset:1px;}
+.param-unit{font-size:12.5px; color:var(--ink-soft);}
+.unit-toggle{display:flex; border:1.5px solid var(--line); border-radius:8px; overflow:hidden;}
+.unit-btn{
+  padding:9px 16px; border:none; background:#fff; font-size:13px; font-weight:600;
+  color:var(--ink-soft); cursor:pointer; font-family:var(--font-body); transition:all 0.15s;
+}
+.unit-btn + .unit-btn{border-left:1.5px solid var(--line);}
+.unit-btn.active{background:var(--action); color:#fff;}
+.unit-btn:hover:not(.active){background:var(--action-soft);}
+
+.banner{
+  display:flex; align-items:flex-start; gap:12px;
+  padding:13px 16px; border-radius:9px; margin-bottom:20px; font-size:13px; line-height:1.5;
+}
+.banner-action{background:var(--action-soft); color:var(--action-dark);}
+.banner-warn{background:var(--warn-soft); color:#7A5A1E;}
+.banner-critical{background:var(--critical-soft); color:#8C3522;}
+
+.empty-state{
+  text-align:center; padding:60px 20px; color:var(--ink-soft); font-size:14px;
+}
+
+.mobile-nav{display:none;}
+
+@media (max-width: 980px){
+  .sidebar{display:none;}
+  .main{padding:18px 16px 50px;}
+  .kpi-grid{grid-template-columns:1fr 1fr;}
+  .bays{grid-template-columns:1fr;}
+  .dock-title{font-size:32px;}
+  .mobile-nav{
+    display:flex; gap:6px; overflow-x:auto; padding-bottom:14px; margin-bottom:6px;
+    border-bottom:1px solid var(--line); -webkit-overflow-scrolling:touch;
+  }
+  .mobile-nav button{
+    flex-shrink:0; padding:8px 14px; border-radius:20px; border:1px solid var(--line);
+    background:#fff; font-size:13px; font-weight:500; color:var(--ink-soft);
+    font-family:var(--font-body); cursor:pointer; white-space:nowrap;
+  }
+  .mobile-nav button.active{background:var(--action); color:#fff; border-color:var(--action);}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important; animation:none !important;}
+}
+
+@media print{
+  body.printing-recepcao .sidebar, body.printing-forecast .sidebar,
+  body.printing-recepcao .toolbar, body.printing-forecast .toolbar,
+  body.printing-recepcao .mobile-nav, body.printing-forecast .mobile-nav,
+  body.printing-recepcao .eyebrow, body.printing-forecast .eyebrow,
+  body.printing-recepcao .page-sub, body.printing-forecast .page-sub{ display:none !important; }
+  body.printing-recepcao .main, body.printing-forecast .main{ padding:0; max-width:none; }
+  body.printing-recepcao .panel, body.printing-forecast .panel{ box-shadow:none; border:none; }
+  body.printing-recepcao table, body.printing-forecast table{ font-size:10.5px; }
+  body.printing-recepcao thead th, body.printing-forecast thead th{ position:static; }
+  body.printing-recepcao .page-title, body.printing-forecast .page-title{ font-size:20px; margin-bottom:10px; }
+  body.printing-recepcao .table-wrap, body.printing-forecast .table-wrap{ max-height:none !important; overflow:visible !important; }
+  body *{ visibility:hidden; }
+  body.printing-recepcao #recepcao-panel, body.printing-recepcao #recepcao-panel *,
+  body.printing-forecast #forecast-panel, body.printing-forecast #forecast-panel *,
+  body.printing-forecast #calendario-semanal-panel, body.printing-forecast #calendario-semanal-panel *,
+  body.printing-recepcao .page-title, body.printing-forecast .page-title{ visibility:visible; }
+  body.printing-recepcao .page-title, body.printing-forecast .page-title{ position:relative; }
+  body.printing-recepcao #recepcao-panel{ position:absolute; left:0; top:60px; width:100%; }
+  body.printing-forecast #forecast-panel{ position:relative; left:0; width:100%; margin-top:14px; }
+  body.printing-forecast #calendario-semanal-panel{ position:relative; left:0; width:100%; margin-top:18px; page-break-before:always; }
+  body.printing-forecast table{ font-size:7.5px; }
+  body.printing-forecast input.cell-input{
+    border:none; background:transparent; padding:0; width:auto; font-size:7.5px; color:inherit; text-align:right;
+  }
+  body.printing-forecast .panel{ overflow:visible; }
+  body.printing-forecast table th, body.printing-forecast table td{ padding:3px 5px; }
+}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+// Valores padrão dos parâmetros — usados no arranque e no botão "Repor parâmetros padrão"
+// da aba Parâmetros. nDiasTendencia fica null até haver histórico carregado (usa todo o histórico).
+const DEFAULT_PARAMS = { coberturaAlvoGlobal: 5, horizonte: 7, nDiasTendencia: null, stockMinSeg: 0, unidadeMedida: 'UN', qtdPorCaixa: 1, diasEntregaCD: ['Seg','Qua','Sex'], maxCxDiaCalendario: null, maxExcedenteVendaSemanal: null, maxCxDiaDistribuicaoCD: null };
+
+const STATE = {
+  loaded: false,
+  vendasRows: null,
+  pivot: null,
+  dateList: null,
+  lojas: null,
+  seasonalIdx: null,
+  nomeLoja: {},
+  params: { ...DEFAULT_PARAMS, diasEntregaCD: [...DEFAULT_PARAMS.diasEntregaCD] },
+  coberturaPorLoja: {},
+  stockOverride: {},
+  // Stock construído a partir das distribuições GRAVADAS na aba "Distribuição por CD":
+  // { loja: [ { qtd (unid. base), data 'YYYY-MM-DD', cd } ] } — acumula a cada gravação.
+  stockGravado: {},
+  // Histórico de gravações por CD (para feedback e para "Limpar gravações"):
+  // { cd: [ { data ISO, totalCx, dia } ] }
+  gravacoesPorCD: {},
+  // Edições manuais da coluna "CX a Distribuir": { chave (cd ou cd__dia): { loja: cx } }
+  distribuicaoEditada: {},
+  cdMap: null,
+  cdFilter: 'all',
+  fileNamePlanning: null,
+  fileErrorPlanning: null,
+  fileWarningPlanning: null,
+  cdMapSource: null,
+  diasEntregaLoja: null,
+  lojasHabilitadas: null,
+  fileNameLojasHabilitadas: null,
+  fileErrorLojasHabilitadas: null,
+  qtdRecebidaPorCD: {},
+  diaCDSelecionado: {},
+  view: 'resumo',
+  search: '',
+  statusFilter: 'all',
+  sortForecast: { field: null, dir: 'desc' },
+  fileErrors: { vendas: null },
+  fileNames: { vendas: null },
+};
+
+/* ============================================================
+   CALC ENGINE — replicado e validado contra o modelo Excel
+   ============================================================ */
+const DOW_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+function excelSerialToDate(serial){
+  const utc_days = Math.floor(serial - 25569);
+  return new Date(utc_days * 86400 * 1000);
+}
+function dateKey(d){ return d.toISOString().slice(0,10); }
+function addDays(d,n){ const r = new Date(d); r.setUTCDate(r.getUTCDate()+n); return r; }
+// Normaliza um código de loja para comparação entre ficheiros (Stock, Planning, Lojas
+// Habilitadas): remove espaços nas pontas e uniformiza a capitalização. Sem isto, pequenas
+// diferenças de formatação entre ficheiros (ex. "a026" vs "A026", ou espaços invisíveis vindos
+// do Excel) fazem o cruzamento falhar silenciosamente — as lojas aparecem na lista mas perdem o
+// Calendário Semanal de Entrega, o CD, ou ficam de fora do filtro de lojas habilitadas.
+function normLoja(v){ return String(v==null?'':v).trim().toUpperCase(); }
+function fmt1(v){ return (Math.round(v*10)/10).toLocaleString('pt-PT',{minimumFractionDigits:1,maximumFractionDigits:1}); }
+function fmtInt(v){ return Math.round(v).toLocaleString('pt-PT'); }
+function unidLabel(){ return STATE.params.unidadeMedida; }
+function toCaixas(v){
+  const qpc = STATE.params.qtdPorCaixa || 1;
+  return Math.ceil((v - 1e-9) / qpc);
+}
+function fmtCx(v){
+  if (v<=0) return '0';
+  return Math.round(toCaixas(v)).toLocaleString('pt-PT');
+}
+// Igual a toCaixas, mas aplica o limite máximo de caixas/dia configurado para o
+// Calendário Semanal de Entrega por Loja (STATE.params.maxCxDiaCalendario). Se o
+// parâmetro não estiver definido (null/''), comporta-se exatamente como toCaixas.
+function toCaixasCalendario(v){
+  const cx = toCaixas(v);
+  const max = STATE.params.maxCxDiaCalendario;
+  if (max !== null && max !== undefined && max !== '' && !isNaN(max)){
+    return Math.min(cx, max);
+  }
+  return cx;
+}
+// Calcula, para uma loja, as caixas sugeridas em cada dia da semana (índice 0=Seg..6=Dom)
+// já aplicando os dois limites do Calendário Semanal de Entrega por Loja:
+//  1) limite por dia (maxCxDiaCalendario) — aplicado célula a célula;
+//  2) limite de excedente sobre a venda média semanal (maxExcedenteVendaSemanal) — o total da
+//     semana nunca pode superar (Venda Méd. Semanal em CX) + este excedente. Se o total (já com
+//     o limite diário aplicado) ultrapassar esse teto, o corte é distribuído a partir do último
+//     dia de entrega da semana para o primeiro, sem deixar nenhum dia abaixo de 0.
+// Devolve { porDia: [{idx, cxFinal, cxComLimiteDiario, atingiuLimiteDiario, atingiuLimiteSemanal}], total }
+function computeCalendarioSemanalCx(x){
+  const diasComInfo = [];
+  DOW_SEMANA.forEach((d, idx) => {
+    const info = x.calendarioSemanal[idx];
+    if (!info) return;
+    diasComInfo.push({ idx, info, cxComLimiteDiario: toCaixasCalendario(info.qtd) });
+  });
+
+  const totalComLimiteDiario = diasComInfo.reduce((s, d) => s + d.cxComLimiteDiario, 0);
+  const maxExcedente = STATE.params.maxExcedenteVendaSemanal;
+  // O limite de excedente sobre a venda média semanal não se aplica a lojas sem histórico de
+  // vendas: nessas lojas mediaReal é 0, então o "limite" seria apenas o excedente configurado,
+  // o que cortaria indevidamente o stock mínimo de segurança sem nenhuma venda para justificar.
+  const temLimiteSemanal = !x.semHistorico && (maxExcedente !== null && maxExcedente !== undefined && maxExcedente !== '' && !isNaN(maxExcedente));
+  const vendaMediaSemanalCx = toCaixas(x.mediaReal * 7);
+  const limiteSemanal = vendaMediaSemanalCx + (temLimiteSemanal ? maxExcedente : Infinity);
+
+  let excesso = temLimiteSemanal ? Math.max(0, totalComLimiteDiario - limiteSemanal) : 0;
+  // distribui o corte do ultimo dia de entrega da semana para o primeiro
+  const resultadosPorIdx = {};
+  for (let i = diasComInfo.length - 1; i >= 0; i--){
+    const d = diasComInfo[i];
+    let cxFinal = d.cxComLimiteDiario;
+    if (excesso > 0){
+      const corte = Math.min(excesso, cxFinal);
+      cxFinal -= corte;
+      excesso -= corte;
+    }
+    resultadosPorIdx[d.idx] = {
+      cxFinal,
+      cxComLimiteDiario: d.cxComLimiteDiario,
+      atingiuLimiteDiario: d.cxComLimiteDiario < toCaixas(d.info.qtd),
+      atingiuLimiteSemanal: cxFinal < d.cxComLimiteDiario
+    };
+  }
+  const totalFinal = Object.values(resultadosPorIdx).reduce((s,r)=>s+r.cxFinal,0);
+  return { porIdx: resultadosPorIdx, total: totalFinal, limiteSemanal: temLimiteSemanal ? limiteSemanal : null, vendaMediaSemanalCx };
+}
+// Agrega, por CD, o total de caixas que o CD precisa de RECEBER DO FORNECEDOR em cada dia
+// configurado em STATE.params.diasEntregaCD. Como a distribuição às lojas ocorre no dia seguinte
+// (D+1) à receção do CD, a quantidade no dia X do CD é a soma das entregas às lojas no dia X+1
+// (já com os limites diário e de excedente semanal aplicados, via computeCalendarioSemanalCx).
+// Também agrega o forecast de vendas em unidade base (KG/UN), somando x.calendarioSemanal[idx].qtd
+// de todas as lojas — sem arredondamento a caixa nem limites aplicados, é o forecast "puro".
+// Lojas sem CD definido são agrupadas em '— Sem CD —'.
+// Devolve um array ordenado: [{ cd, porDiaCD: {idxDiaCD: cx}, porDiaCDQtd: {idxDiaCD: qtd}, total, totalQtd, nLojas }]
+function computeTotalCxPorCDEDia(rows){
+  const lojasComCalendario = rows.filter(x => x.calendarioSemanal);
+  const diasCD = STATE.params.diasEntregaCD || [];
+  const idxDiasCD = diasCD.map(d => DOW_SEMANA.indexOf(d)).filter(i => i>=0);
+  const porCD = {};
+  lojasComCalendario.forEach(x => {
+    const cd = x.cd || '— Sem CD —';
+    if (!porCD[cd]) porCD[cd] = { cd, porDiaCD: {}, porDiaCDQtd: {}, total: 0, totalQtd: 0, nLojas: 0 };
+    idxDiasCD.forEach(i => {
+      if (porCD[cd].porDiaCD[i] === undefined) porCD[cd].porDiaCD[i] = 0;
+      if (porCD[cd].porDiaCDQtd[i] === undefined) porCD[cd].porDiaCDQtd[i] = 0;
+    });
+    const calc = computeCalendarioSemanalCx(x);
+    idxDiasCD.forEach(idxCD => {
+      const idxEntregaLoja = (idxCD + 1) % 7; // D+1: dia em que a loja recebe a entrega
+      const r = calc.porIdx[idxEntregaLoja];
+      if (r) porCD[cd].porDiaCD[idxCD] += r.cxFinal;
+      const info = x.calendarioSemanal[idxEntregaLoja];
+      if (info) porCD[cd].porDiaCDQtd[idxCD] += info.qtd;
+    });
+    porCD[cd].total += calc.total;
+    porCD[cd].totalQtd += DOW_SEMANA.reduce((s,d,idx) => s + (x.calendarioSemanal[idx] ? x.calendarioSemanal[idx].qtd : 0), 0);
+    porCD[cd].nLojas += 1;
+  });
+  return Object.values(porCD).sort((a,b) => a.cd.localeCompare(b.cd, 'pt-PT'));
+}
+
+function parseVendasWorkbook(wb){
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {defval:null});
+  const clean = [];
+  for(const r of rows){
+    let d = r['Date'];
+    if (typeof d === 'number') d = excelSerialToDate(d);
+    if (!(d instanceof Date) || isNaN(d.getTime())) continue;
+    const loja = r['Loja'];
+    if (!loja) continue;
+    clean.push({ date:d, loja:normLoja(loja), vendasUN: Number(r['Vendas UN'])||0 });
+  }
+  if (clean.length === 0) throw new Error('Não foram encontradas linhas válidas com colunas "Date", "Loja" e "Vendas UN".');
+  return clean;
+}
+
+function parsePlanningWorkbook(wb){
+  // Prefere a sheet "Planning Mensal" (formato conhecido com colunas Lojas/CD); senao usa a primeira sheet
+  const preferredNames = ['Planning Mensal', 'Planning', 'PlanningMensal'];
+  let sheetName = wb.SheetNames.find(n => preferredNames.some(p => n.toLowerCase().trim() === p.toLowerCase()));
+  if (!sheetName) sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {defval:null});
+  if (rows.length === 0) throw new Error('Ficheiro de planning vazio.');
+
+  // Procura colunas de codigo de loja e CD com tolerancia a variantes de nome
+  const keys = Object.keys(rows.find(r => Object.values(r).some(v=>v!==null)) || rows[0]);
+  const findKey = (candidates) => keys.find(k => candidates.some(c => k.toLowerCase().trim() === c.toLowerCase()));
+  const lojaKey = findKey(['Lojas','Loja','Centro','Cód. Loja','Codigo Loja','Cod Loja','Numero Loja']);
+  const cdKey = findKey(['CD','Centro de Distribuição','Centro Distribuição','Centro Distribuicao']);
+  if (!lojaKey || !cdKey) {
+    throw new Error(`Não foram encontradas as colunas de Loja e CD na aba "${sheetName}". Colunas disponíveis: ${keys.join(', ')}`);
+  }
+
+  // Coluna com o NOME da loja: procura primeiro colunas explícitas de nome; se não existirem,
+  // aceita a coluna "Loja" desde que não seja a mesma coluna usada para o código (ex: ficheiros
+  // com "Lojas" = código e "Loja" = nome). É esta coluna que alimenta o campo Nome nas abas
+  // Receção Diária, Forecast e Receção e Distribuição por CD.
+  const nomeKey = keys.find(k =>
+    k !== lojaKey && k !== cdKey &&
+    ['nome','nome loja','nome da loja','descrição','descricao','designação','designacao','loja']
+      .some(c => k.toLowerCase().trim() === c)
+  );
+
+  // Procura o bloco "PLANO DE RECEÇÃO DOS PEDIDOS" — a 1a coluna desse bloco traz o cabecalho
+  // "Segunda-feira" na 1a linha de dados, e as 6 colunas seguintes (na ordem em que aparecem no
+  // ficheiro) sao Terca a Domingo. Identificamos a coluna inicial pelo nome e usamos a ordem das
+  // colunas no array `keys` para encontrar as 6 seguintes, sem depender dos nomes __EMPTY_N do XLSX.
+  const planoKeyCandidates = ['PLANO DE RECEÇÃO DOS PEDIDOS','PLANO DE RECEPÇÃO DOS PEDIDOS','PLANO DE RECECAO DOS PEDIDOS'];
+  const planoStartKey = findKey(planoKeyCandidates);
+  let diasKeysOrdered = null;
+  if (planoStartKey){
+    const startIdx = keys.indexOf(planoStartKey);
+    diasKeysOrdered = keys.slice(startIdx, startIdx+7); // Seg,Ter,Qua,Qui,Sex,Sab,Dom
+  }
+  const DOW_FULL_ORDER = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+
+  const map = {};
+  const diasEntregaLoja = {};
+  const nomeLoja = {};
+  for(const r of rows){
+    const loja = r[lojaKey];
+    const cd = r[cdKey];
+    if (!loja || !cd) continue;
+    if (typeof cd === 'number') continue; // valores invalidos tipo 0 nas linhas de cabecalho/total
+    const lojaStr = normLoja(loja);
+    const cdStr = String(cd).trim();
+    if (!lojaStr || !cdStr) continue;
+    map[lojaStr] = cdStr;
+
+    if (nomeKey){
+      const nome = r[nomeKey];
+      if (nome !== null && String(nome).trim() !== '') nomeLoja[lojaStr] = String(nome).trim();
+    }
+
+    if (diasKeysOrdered){
+      const dias = [];
+      diasKeysOrdered.forEach((k, i) => {
+        const v = r[k];
+        if (v !== null && String(v).trim() !== '') dias.push(DOW_FULL_ORDER[i]);
+      });
+      if (dias.length > 0) diasEntregaLoja[lojaStr] = dias;
+    }
+  }
+  if (Object.keys(map).length === 0) throw new Error('Não foram encontradas linhas válidas com Loja e CD preenchidos.');
+  return { map, diasEntregaLoja, nomeLoja };
+}
+
+function parseLojasHabilitadasWorkbook(wb){
+  // Procura a sheet com colunas Centro (codigo loja) + CD; tenta todas as sheets do ficheiro
+  // ate encontrar uma com as colunas certas (ex: "Folha3" no ficheiro de exemplo).
+  let found = null;
+  for (const sheetName of wb.SheetNames){
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:null});
+    if (rows.length === 0) continue;
+    const firstNonEmpty = rows.find(r => Object.values(r).some(v=>v!==null)) || rows[0];
+    const keys = Object.keys(firstNonEmpty);
+    const findKey = (candidates) => keys.find(k => candidates.some(c => k.toLowerCase().trim() === c.toLowerCase()));
+    const lojaKey = findKey(['Centro','Loja','Lojas','Cód. Loja','Codigo Loja','Cod Loja','Numero Loja']);
+    const cdKey = findKey(['CD','Centro de Distribuição','Centro Distribuição','Centro Distribuicao']);
+    if (lojaKey){
+      found = { rows, lojaKey, cdKey };
+      break;
+    }
+  }
+  if (!found) throw new Error('Não foi encontrada nenhuma aba com uma coluna de código de loja (ex: "Centro" ou "Loja").');
+
+  const lojasSet = new Set();
+  const cdMapExtra = {};
+  for (const r of found.rows){
+    const loja = r[found.lojaKey];
+    if (!loja) continue;
+    if (typeof loja === 'number') continue; // ignora linhas de total/cabecalho residuais
+    const lojaStr = normLoja(loja);
+    if (!lojaStr) continue;
+    lojasSet.add(lojaStr);
+    if (found.cdKey){
+      const cd = r[found.cdKey];
+      if (cd && typeof cd !== 'number'){
+        const cdStr = String(cd).trim();
+        if (cdStr) cdMapExtra[lojaStr] = cdStr;
+      }
+    }
+  }
+  if (lojasSet.size === 0) throw new Error('Não foram encontradas lojas válidas no ficheiro.');
+  return { lojasSet, cdMapExtra };
+}
+
+function buildPivot(vendasRows){
+  const dateSet = [...new Set(vendasRows.map(r=>dateKey(r.date)))].sort();
+  const lojas = [...new Set(vendasRows.map(r=>r.loja))].sort();
+  const dateList = dateSet.map(s=>new Date(s+'T00:00:00.000Z'));
+  const dateIdx = {}; dateSet.forEach((d,i)=>dateIdx[d]=i);
+  const pivot = {};
+  for(const l of lojas) pivot[l] = new Array(dateList.length).fill(0);
+  for(const r of vendasRows){
+    pivot[r.loja][dateIdx[dateKey(r.date)]] += r.vendasUN;
+  }
+  return { pivot, dateList, lojas };
+}
+
+function computeSeasonalIndex(pivot, dateList, lojas){
+  const totalPerDay = dateList.map((_,i)=> lojas.reduce((s,l)=>s+pivot[l][i],0));
+  const dows = dateList.map(d=>d.getUTCDay());
+  const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
+  totalPerDay.forEach((v,i)=>{ sums[dows[i]]+=v; counts[dows[i]]++; });
+  const avgByDow = sums.map((s,i)=> counts[i] ? s/counts[i] : 0);
+  const validAvgs = avgByDow.filter((_,i)=>counts[i]>0);
+  const overallAvg = validAvgs.reduce((a,b)=>a+b,0) / validAvgs.length;
+  return avgByDow.map(v => overallAvg>0 ? v/overallAvg : 1);
+}
+
+function linregress(x,y){
+  const n=x.length;
+  const sumX=x.reduce((a,b)=>a+b,0), sumY=y.reduce((a,b)=>a+b,0);
+  const sumXY=x.reduce((a,b,i)=>a+b*y[i],0), sumXX=x.reduce((a,b)=>a+b*b,0);
+  const denom=(n*sumXX - sumX*sumX);
+  if (denom===0) return { slope:0, intercept: n? sumY/n : 0 };
+  const slope=(n*sumXY - sumX*sumY)/denom;
+  const intercept=(sumY - slope*sumX)/n;
+  return { slope, intercept };
+}
+
+function computeForecastForLoja(serie, dateList, seasonalIdx, nDiasTendencia, horizonteMax){
+  const n = serie.length;
+  const nUse = Math.min(nDiasTendencia, n);
+  const start = n - nUse;
+  const ySlice = serie.slice(start);
+  const xSlice = ySlice.map((_,i)=>i+1);
+  const deseason = ySlice.map((v,i)=>{
+    const dow = dateList[start+i].getUTCDay();
+    const f = seasonalIdx[dow] || 1;
+    return v/f;
+  });
+  const { slope, intercept } = linregress(xSlice, deseason);
+  const lastDate = dateList[n-1];
+  const forecast = [];
+  for(let t=1; t<=horizonteMax; t++){
+    const xFut = xSlice.length + t;
+    let nivel = intercept + slope*xFut;
+    if (nivel<0) nivel = 0;
+    const futDate = addDays(lastDate, t);
+    const f = seasonalIdx[futDate.getUTCDay()] || 1;
+    forecast.push(Math.round(nivel*f*10)/10);
+  }
+  const mediaReal = ySlice.reduce((a,b)=>a+b,0) / ySlice.length;
+  return { slope, intercept, forecast, mediaReal };
+}
+
+/* ============================================================
+   CALENDÁRIO SEMANAL DE ENTREGA POR DIA DA SEMANA (com base no
+   Planning de Entrega): cada entrega de uma loja cobre o forecast
+   de vendas desde esse dia até ao dia anterior à entrega seguinte
+   da mesma loja, de forma cíclica numa semana de 7 dias.
+   ============================================================ */
+const DOW_SEMANA = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom']; // ordem natural da semana, Seg=0
+
+function computeCalendarioEntregaSemanal(forecast14, lastDate, diasEntregaLoja, qtdMinimaSemHistorico){
+  // diasEntregaLoja: array de strings ('Seg','Ter',...) — dias em que esta loja recebe entrega
+  if (!diasEntregaLoja || diasEntregaLoja.length === 0) return null;
+
+  // indices (0..6, Seg=0) dos dias de entrega, ordenados
+  const idxEntrega = diasEntregaLoja
+    .map(d => DOW_SEMANA.indexOf(d))
+    .filter(i => i>=0)
+    .sort((a,b)=>a-b);
+  if (idxEntrega.length === 0) return null;
+
+  // Loja sem histórico de vendas: não há forecast para repartir (todos os dias dariam 0 CX), por
+  // isso sugerimos o Stock Mínimo de Segurança integral em CADA dia de entrega da loja (não
+  // dividido entre eles) — cada entrega garante, por si só, o mínimo definido nos parâmetros.
+  if (qtdMinimaSemHistorico !== undefined && qtdMinimaSemHistorico !== null && qtdMinimaSemHistorico > 0){
+    const resultado = {};
+    idxEntrega.forEach(idx => { resultado[idx] = { diasCobertos: [idx], qtd: qtdMinimaSemHistorico }; });
+    return resultado;
+  }
+
+  // mapa: para cada um dos 7 dias futuros (a partir de lastDate+1), qual o indice de semana (0..6) e o forecast desse dia
+  const futDays = [];
+  for (let t=1; t<=7; t++){
+    const d = addDays(lastDate, t);
+    const dowJs = d.getUTCDay(); // 0=Dom..6=Sab
+    const idxSemana = (dowJs + 6) % 7; // converte para Seg=0..Dom=6
+    futDays.push({ date:d, idxSemana, forecast: forecast14[t-1] });
+  }
+
+  // Para cada dia de entrega, soma o forecast dos dias deste at\u00e9 ao dia anterior \u00e0 proxima entrega
+  // (ciclicamente: se a ultima entrega da semana for Sex, e a primeira for Seg, Sex cobre Sex,Sab,Dom)
+  const resultado = {}; // idxSemana de entrega -> { dows_cobertos: [...], qtd: number }
+  const nEntregas = idxEntrega.length;
+  for (let e=0; e<nEntregas; e++){
+    const diaAtual = idxEntrega[e];
+    const proximaEntrega = idxEntrega[(e+1) % nEntregas];
+    // quantidade de dias cobertos (ciclicamente) desde diaAtual até proximaEntrega-1
+    let span = proximaEntrega - diaAtual;
+    if (span <= 0) span += 7; // wrap around da semana
+    const diasCobertos = [];
+    let soma = 0;
+    for (let k=0; k<span; k++){
+      const idx = (diaAtual + k) % 7;
+      diasCobertos.push(idx);
+      const futDay = futDays.find(f => f.idxSemana === idx);
+      if (futDay) soma += futDay.forecast;
+    }
+    resultado[diaAtual] = { diasCobertos, qtd: Math.round(soma*10)/10 };
+  }
+  return resultado; // { idxSemanaEntrega: { diasCobertos:[...], qtd } }
+}
+
+/* ============================================================
+   DISTRIBUIÇÃO DIÁRIA ALINHADA A DATAS CONCRETAS, RESPEITANDO OS
+   DIAS DE ENTREGA DE CADA LOJA (Planning). Usado na Receção Diária:
+   para cada data futura concreta, se a loja não tem entrega nesse
+   dia da semana, a celula fica null (S/E). Se tem entrega, o peso
+   relativo de cada periodo de entrega vem do forecast acumulado
+   desse periodo, mas o valor final é escalado para que a soma de
+   todas as entregas no horizonte seja exatamente igual ao
+   "Total a Receber" (qtdReceberHoje) já calculado para a loja —
+   mantém a tabela coerente com a coluna de totais.
+   ============================================================ */
+function computeDistribuicaoDiariaComPlanning(forecast14, lastDate, diasEntregaLoja, nDiasExibir, qtdReceberHoje, qtdMinimaSemHistorico){
+  if (!diasEntregaLoja || diasEntregaLoja.length === 0) return null;
+  const idxEntregaSet = new Set(diasEntregaLoja.map(d => DOW_SEMANA.indexOf(d)).filter(i=>i>=0));
+  if (idxEntregaSet.size === 0) return null;
+
+  // gera array de {date, idxSemana, forecast} para uma janela ampla (horizonte exibido + 7 dias de
+  // margem, para conseguir encontrar a "proxima entrega" mesmo que caia fora da janela visivel)
+  const janela = [];
+  const margem = 7;
+  for (let t=1; t<=nDiasExibir+margem; t++){
+    const d = addDays(lastDate, t);
+    const dowJs = d.getUTCDay();
+    const idxSemana = (dowJs + 6) % 7;
+    const fc = (t-1 < forecast14.length) ? forecast14[t-1] : forecast14[forecast14.length-1];
+    janela.push({ date:d, idxSemana, forecast: fc });
+  }
+
+  const isEntrega = new Array(nDiasExibir).fill(false);
+  for (let t=0; t<nDiasExibir; t++){
+    if (idxEntregaSet.has(janela[t].idxSemana)) isEntrega[t] = true;
+  }
+
+  // Loja sem histórico de vendas: não há forecast para repartir, por isso sugerimos o Stock
+  // Mínimo de Segurança integral em CADA dia de entrega (mesma regra usada no Calendário Semanal
+  // de Entrega por Loja) — em vez de ratear qtdReceberHoje pelos dias do horizonte.
+  if (qtdMinimaSemHistorico !== undefined && qtdMinimaSemHistorico !== null && qtdMinimaSemHistorico > 0){
+    const resultado = [];
+    for (let t=0; t<nDiasExibir; t++){
+      resultado.push(isEntrega[t] ? qtdMinimaSemHistorico : null);
+    }
+    return resultado;
+  }
+
+  // peso bruto de cada dia de entrega (forecast acumulado do periodo que cobre)
+  const pesos = new Array(nDiasExibir).fill(0);
+  for (let t=0; t<nDiasExibir; t++){
+    if (!isEntrega[t]) continue;
+    let soma = janela[t].forecast;
+    for (let k=t+1; k<janela.length; k++){
+      if (idxEntregaSet.has(janela[k].idxSemana)) break;
+      soma += janela[k].forecast;
+    }
+    pesos[t] = soma;
+  }
+
+  const totalPesos = pesos.reduce((a,b)=>a+b,0);
+  const nEntregasNoHorizonte = isEntrega.filter(Boolean).length;
+  const resultado = [];
+  for (let t=0; t<nDiasExibir; t++){
+    if (!isEntrega[t]){ resultado.push(null); continue; }
+    const valor = totalPesos>0
+      ? qtdReceberHoje * (pesos[t]/totalPesos)
+      : (nEntregasNoHorizonte>0 ? qtdReceberHoje/nEntregasNoHorizonte : 0);
+    resultado.push(Math.round(valor*10)/10);
+  }
+  return resultado;
+}
+
+/* ============================================================
+   STOCK A PARTIR DAS DISTRIBUIÇÕES GRAVADAS (Distribuição por CD)
+   Cada gravação acumula a quantidade distribuída à loja na data em
+   que foi gravada. O stock efetivo é simulado dia a dia: soma as
+   quantidades gravadas e desconta a venda prevista dos dias
+   SEGUINTES a cada gravação, até ao dia de hoje (nunca abaixo de 0).
+   ============================================================ */
+// Venda prevista para uma data concreta: usa o forecast da loja quando a data cai dentro da
+// janela de forecast (a partir do último dia de vendas carregado); fora dessa janela usa a
+// venda média diária como aproximação.
+function vendaPrevistaNoDia(d, lastDate, forecast, mediaReal){
+  const t = Math.round((d.getTime() - lastDate.getTime()) / 86400000);
+  if (t >= 1 && t <= forecast.length) return forecast[t-1];
+  return Math.max(0, mediaReal);
+}
+
+function stockGravadoEfetivo(loja, lastDate, forecast, mediaReal){
+  const entradas = STATE.stockGravado[loja];
+  if (!entradas || entradas.length === 0) return 0;
+  // agrega as gravações por data
+  const porDia = {};
+  entradas.forEach(e => { porDia[e.data] = (porDia[e.data] || 0) + e.qtd; });
+  const dias = Object.keys(porDia).sort();
+  const primeiro = new Date(dias[0] + 'T00:00:00.000Z');
+  const hoje = new Date(dateKey(new Date()) + 'T00:00:00.000Z');
+  let stock = 0;
+  let d = primeiro;
+  let ehPrimeiroDia = true;
+  while (d <= hoje){
+    // desconta a venda prevista dos dias SEGUINTES à primeira gravação (o dia da própria
+    // gravação não é descontado — só os dias que se seguem)
+    if (!ehPrimeiroDia){
+      stock = Math.max(0, stock - vendaPrevistaNoDia(d, lastDate, forecast, mediaReal));
+    }
+    const k = dateKey(d);
+    if (porDia[k]) stock += porDia[k];
+    ehPrimeiroDia = false;
+    d = addDays(d, 1);
+  }
+  return Math.round(stock * 10) / 10;
+}
+
+function computeAll(){
+  const { pivot, dateList, lojas } = buildPivot(STATE.vendasRows);
+  STATE.pivot = pivot; STATE.dateList = dateList; STATE.lojas = lojas;
+  STATE.seasonalIdx = computeSeasonalIndex(pivot, dateList, lojas);
+  if (STATE.params.nDiasTendencia === null) STATE.params.nDiasTendencia = dateList.length;
+
+  // Lojas consideradas: todas as que têm histórico de vendas carregado (o ficheiro de stock
+  // deixou de existir — o stock atual passa a ser construído pelas distribuições gravadas).
+  let allLojaCodes = lojas.slice().sort();
+
+  // Se houver uma lista de lojas habilitadas a receber o artigo, restringe a essas lojas — mas
+  // sem perder lojas habilitadas que ainda não têm histórico de vendas (ex: lojas novas). Essas
+  // entram com stock 0 e são tratadas como "sem histórico", recebendo o stock mínimo de
+  // segurança nos seus dias de entrega.
+  if (STATE.lojasHabilitadas){
+    allLojaCodes = allLojaCodes.filter(l => STATE.lojasHabilitadas.has(l));
+    const lojasSoHabilitadas = [...STATE.lojasHabilitadas].filter(l => !pivot[l]);
+    allLojaCodes = [...new Set([...allLojaCodes, ...lojasSoHabilitadas])].sort();
+  }
+
+  const lastDateVendas = dateList[dateList.length-1];
+  const results = [];
+  for(const loja of allLojaCodes){
+    const nome = STATE.nomeLoja[loja] || loja;
+    const serie = pivot[loja] || new Array(dateList.length).fill(0);
+    const semHistorico = !(loja in pivot) || serie.every(v=>v===0);
+
+    const { slope, intercept, forecast, mediaReal } = computeForecastForLoja(
+      serie, dateList, STATE.seasonalIdx, STATE.params.nDiasTendencia, 14
+    );
+
+    // Stock atual = acumulado das distribuições gravadas na aba "Distribuição por CD",
+    // descontando a venda prevista dos dias seguintes a cada gravação. A edição manual na
+    // tabela "Forecast e Receção" (stockOverride) continua a sobrepor-se a este valor.
+    const stockBase = stockGravadoEfetivo(loja, lastDateVendas, forecast, mediaReal);
+    const stockAtual = (loja in STATE.stockOverride) ? Math.max(0, STATE.stockOverride[loja]) : stockBase;
+    const stockEditado = (loja in STATE.stockOverride);
+
+    const coberturaAlvo = STATE.coberturaPorLoja[loja] ?? STATE.params.coberturaAlvoGlobal;
+    const coberturaAtual = mediaReal>0 ? stockAtual/mediaReal : null;
+    const forecastHorizonte = forecast.slice(0, STATE.params.horizonte).reduce((a,b)=>a+b,0);
+    const stockNecessario = forecast.slice(0, coberturaAlvo).reduce((a,b)=>a+b,0);
+
+    let qtdReceberHoje;
+    if (semHistorico){
+      // Sem histórico de vendas: garantimos pelo menos o stock mínimo de segurança definido nos parâmetros.
+      qtdReceberHoje = Math.max(0, STATE.params.stockMinSeg - stockAtual);
+    } else {
+      qtdReceberHoje = Math.max(0, stockNecessario + STATE.params.stockMinSeg - stockAtual);
+    }
+
+    // Status de urgência: baseado na proporção entre o que falta receber e o que é necessário
+    // para a cobertura alvo — não depende da "Cobertura Atual" (stock atual ÷ venda média).
+    const necessarioTotal = stockNecessario + STATE.params.stockMinSeg;
+    const faltaProporcao = necessarioTotal>0 ? qtdReceberHoje/necessarioTotal : 0;
+    let status;
+    if (semHistorico) status = 'sem_historico';
+    else if (faltaProporcao >= 0.5) status = 'critico';
+    else if (faltaProporcao > 0) status = 'abaixo';
+    else status = 'ok';
+
+    const forecastH = forecast.slice(0, STATE.params.horizonte);
+    const somaForecastH = forecastH.reduce((a,b)=>a+b,0);
+    const distribuicaoDiaria = forecastH.map(f=>{
+      if (somaForecastH<=0) return Math.round((qtdReceberHoje/STATE.params.horizonte)*10)/10;
+      return Math.round(qtdReceberHoje * f / somaForecastH * 10)/10;
+    });
+
+    const stockNegativo = false; // sem ficheiro de stock, não há valores negativos vindos do SAP
+
+    const diasEntrega = (STATE.diasEntregaLoja && STATE.diasEntregaLoja[loja]) ? STATE.diasEntregaLoja[loja] : null;
+    const qtdMinimaSemHistorico = semHistorico ? STATE.params.stockMinSeg : null;
+    const calendarioSemanal = diasEntrega ? computeCalendarioEntregaSemanal(forecast, dateList[dateList.length-1], diasEntrega, qtdMinimaSemHistorico) : null;
+    const distribuicaoDiariaPlanning = diasEntrega
+      ? computeDistribuicaoDiariaComPlanning(forecast, dateList[dateList.length-1], diasEntrega, STATE.params.horizonte, qtdReceberHoje, qtdMinimaSemHistorico)
+      : null;
+
+    results.push({
+      loja, nome, stockAtual, stockBruto: stockBase, mediaReal, coberturaAlvo,
+      slope, intercept, forecast, forecastDia1: forecast[0], coberturaAtual, status,
+      forecastHorizonte, stockNecessario, qtdReceberHoje, distribuicaoDiaria, distribuicaoDiariaPlanning,
+      semHistorico, stockNegativo, temStock: true, stockEditado,
+      cd: (STATE.cdMap && STATE.cdMap[loja]) ? STATE.cdMap[loja] : null,
+      diasEntrega, calendarioSemanal,
+    });
+  }
+  return results;
+}
+
+/* ============================================================
+   FILE LOADING
+   ============================================================ */
+function readFileAsWorkbook(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        resolve(wb);
+      } catch(err){ reject(err); }
+    };
+    reader.onerror = ()=> reject(new Error('Não foi possível ler o ficheiro.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function handleFileSelect(kind, file){
+  if (!file) return;
+  if (kind === 'planning'){
+    STATE.fileErrorPlanning = null;
+    STATE.fileWarningPlanning = null;
+    STATE.fileNamePlanning = file.name;
+    try{
+      const wb = await readFileAsWorkbook(file);
+      const { map, diasEntregaLoja, nomeLoja } = parsePlanningWorkbook(wb);
+      STATE.cdMap = map;
+      STATE.cdMapSource = 'planning';
+      STATE.nomeLoja = nomeLoja || {};
+      STATE.diasEntregaLoja = (diasEntregaLoja && Object.keys(diasEntregaLoja).length>0) ? diasEntregaLoja : null;
+      if (!STATE.diasEntregaLoja){
+        STATE.fileWarningPlanning = 'CD mapeado, mas não foi encontrado o bloco "PLANO DE RECEÇÃO DOS PEDIDOS" com os dias de entrega — o Calendário Semanal de Entrega por Loja e o Total por CD não vão aparecer. Confirme se o ficheiro tem esse bloco com 7 colunas (Seg a Dom).';
+      }
+    } catch(err){
+      STATE.fileErrorPlanning = err.message || 'Ficheiro inválido.';
+      if (STATE.cdMapSource === 'planning'){ STATE.cdMap = null; STATE.cdMapSource = null; }
+      STATE.diasEntregaLoja = null;
+      STATE.nomeLoja = {};
+    }
+    render();
+    return;
+  }
+  if (kind === 'lojasHabilitadas'){
+    STATE.fileErrorLojasHabilitadas = null;
+    STATE.fileNameLojasHabilitadas = file.name;
+    try{
+      const wb = await readFileAsWorkbook(file);
+      const { lojasSet, cdMapExtra } = parseLojasHabilitadasWorkbook(wb);
+      STATE.lojasHabilitadas = lojasSet;
+      // Se ainda nao houver mapeamento de CD carregado via planning, usa o deste ficheiro como fallback
+      // (bonus: este ficheiro tambem costuma ter CD), mas sem marcar a baia de Planning como concluida.
+      if ((!STATE.cdMap || STATE.cdMapSource === 'habilitadas') && Object.keys(cdMapExtra).length>0){
+        STATE.cdMap = cdMapExtra;
+        STATE.cdMapSource = 'habilitadas';
+      }
+    } catch(err){
+      STATE.fileErrorLojasHabilitadas = err.message || 'Ficheiro inválido.';
+      STATE.lojasHabilitadas = null;
+    }
+    render();
+    return;
+  }
+  STATE.fileErrors[kind] = null;
+  STATE.fileNames[kind] = file.name;
+  try{
+    const wb = await readFileAsWorkbook(file);
+    if (kind === 'vendas'){
+      STATE.vendasRows = parseVendasWorkbook(wb);
+    }
+  } catch(err){
+    STATE.fileErrors[kind] = err.message || 'Ficheiro inválido.';
+    if (kind==='vendas') STATE.vendasRows = null;
+  }
+  render();
+}
+
+function tryProcessAndEnter(){
+  if (!STATE.vendasRows) return;
+  STATE.results = computeAll();
+  STATE.loaded = true;
+  render();
+}
+
+/* ============================================================
+   ICONS (inline SVG, sem libs externas)
+   ============================================================ */
+const ICONS = {
+  crate: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>`,
+  list: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 6h16M4 12h16M4 18h10"/></svg>`,
+  check: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>`,
+  alert: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 2.7 17.3a1.8 1.8 0 0 0 1.6 2.7h15.4a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z"/></svg>`,
+  lock: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`,
+};
+
+/* nav definition */
+function getNavItems(){
+  const items = [
+    { id:'resumo',    label:'Resumo',           num:'01' },
+    { id:'recepcao',  label:'Receção Diária',   num:'02' },
+    { id:'forecast',  label:'Forecast e Stock', num:'03' },
+  ];
+  if (STATE.cdMap){
+    items.push({ id:'distribuicaocd', label:'Distribuição por CD', num:'04' });
+    items.push({ id:'parametros', label:'Parâmetros', num:'05' });
+  } else {
+    items.push({ id:'parametros', label:'Parâmetros', num:'04' });
+  }
+  return items;
+}
+
+/* ============================================================
+   RENDER: SHELL
+   ============================================================ */
+function render(){
+  const root = document.getElementById('root');
+  if (!STATE.loaded){
+    root.innerHTML = renderDock();
+    bindDockEvents();
+    return;
+  }
+  root.innerHTML = renderApp();
+  bindAppEvents();
+}
+
+function renderDock(){
+  const vendasErr = STATE.fileErrors.vendas;
+  const planningErr = STATE.fileErrorPlanning;
+  const habilitadasErr = STATE.fileErrorLojasHabilitadas;
+  const vendasOk = STATE.vendasRows && !vendasErr;
+  const planningOk = STATE.cdMap && STATE.cdMapSource === 'planning' && !planningErr;
+  const habilitadasOk = STATE.lojasHabilitadas && !habilitadasErr;
+  const canEnter = vendasOk;
+
+  function bayClass(ok, err){ return err ? 'bay error' : (ok ? 'bay filled' : 'bay'); }
+  function bayIcon(ok, err){ return err ? ICONS.alert : (ok ? ICONS.check : ICONS.crate); }
+
+  return `
+  <div class="dock-screen">
+    <div class="dock-card">
+      <div class="dock-mark"><span class="dot"></span><span>Doca de Receção</span></div>
+      <h1 class="dock-title">Quanto vai <em>chegar</em><br>à porta de cada loja?</h1>
+      <p class="dock-desc">Carrega o histórico de vendas. O forecast, a cobertura e a quantidade diária a receber são calculados aqui mesmo, no browser — nada sai do teu computador. O stock de cada loja é construído a partir das distribuições gravadas na aba "Distribuição por CD".</p>
+
+      <div class="bays">
+        <label class="${bayClass(vendasOk, vendasErr)}" id="bay-vendas">
+          <input type="file" id="input-vendas" accept=".xlsx,.xls">
+          <div class="bay-icon">${bayIcon(vendasOk, vendasErr)}</div>
+          <div class="bay-label">Histórico de Vendas</div>
+          <div class="bay-desc">Ficheiro Excel (.xlsx) exportado do SAP / Power BI</div>
+          ${vendasOk ? `<div class="bay-file">${STATE.fileNames.vendas} · ${STATE.vendasRows.length.toLocaleString('pt-PT')} linhas</div>` : ''}
+          ${vendasErr ? `<div class="bay-error-msg">${vendasErr}</div>` : ''}
+        </label>
+
+        <label class="${bayClass(planningOk, planningErr)}" id="bay-planning">
+          <input type="file" id="input-planning" accept=".xlsx,.xls,.csv">
+          <div class="bay-icon">${bayIcon(planningOk, planningErr)}</div>
+          <div class="bay-label">Planning de Entrega <span class="muted" style="font-weight:400; font-size:11.5px;">(opcional)</span></div>
+          <div class="bay-desc">Excel ou CSV com o Centro de Distribuição (CD) e o nome de cada loja — ativa o filtro por CD, a distribuição por CD e os nomes das lojas</div>
+          ${planningOk ? `<div class="bay-file">${STATE.fileNamePlanning} · ${Object.keys(STATE.cdMap).length} lojas mapeadas</div>` : ''}
+          ${planningErr ? `<div class="bay-error-msg">${planningErr}</div>` : ''}
+          ${(planningOk && STATE.fileWarningPlanning) ? `<div class="bay-error-msg" style="color:#7A5A1E;">${STATE.fileWarningPlanning}</div>` : ''}
+        </label>
+      </div>
+
+      <div class="bays" style="margin-top:-2px;">
+        <label class="${bayClass(habilitadasOk, habilitadasErr)}" id="bay-habilitadas">
+          <input type="file" id="input-habilitadas" accept=".xlsx,.xls,.csv">
+          <div class="bay-icon">${bayIcon(habilitadasOk, habilitadasErr)}</div>
+          <div class="bay-label">Lojas que Recebem o Artigo <span class="muted" style="font-weight:400; font-size:11.5px;">(opcional)</span></div>
+          <div class="bay-desc">Excel ou CSV com a lista de lojas habilitadas a receber este artigo — as restantes ficam excluídas do dashboard</div>
+          ${habilitadasOk ? `<div class="bay-file">${STATE.fileNameLojasHabilitadas} · ${STATE.lojasHabilitadas.size} lojas habilitadas${STATE.cdMapSource==='habilitadas' ? ' · CD detetado neste ficheiro' : ''}</div>` : ''}
+          ${habilitadasErr ? `<div class="bay-error-msg">${habilitadasErr}</div>` : ''}
+        </label>
+      </div>
+
+      <button class="dock-cta" id="btn-enter" ${canEnter?'':'disabled'}>
+        ${canEnter ? 'Calcular e abrir dashboard →' : 'Carrega o ficheiro de vendas para continuar'}
+      </button>
+
+      <div class="dock-privacy">${ICONS.lock} Processamento 100% local — os ficheiros nunca são enviados para nenhum servidor.</div>
+
+      <div class="dock-cols">
+        <div><b>Colunas necessárias no Excel de vendas:</b> Date · Loja · Vendas UN</div>
+        <div style="margin-top:4px;"><b>Colunas necessárias no planning de entrega (opcional):</b> Loja/Centro · CD</div>
+        <div style="margin-top:4px;"><b>Colunas necessárias na lista de lojas habilitadas (opcional):</b> Centro/Loja (+ CD, se disponível)</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function bindDockEvents(){
+  const vInput = document.getElementById('input-vendas');
+  const pInput = document.getElementById('input-planning');
+  const hInput = document.getElementById('input-habilitadas');
+  if (vInput) vInput.addEventListener('change', (e)=> handleFileSelect('vendas', e.target.files[0]));
+  if (pInput) pInput.addEventListener('change', (e)=> handleFileSelect('planning', e.target.files[0]));
+  if (hInput) hInput.addEventListener('change', (e)=> handleFileSelect('lojasHabilitadas', e.target.files[0]));
+  const btn = document.getElementById('btn-enter');
+  if (btn) btn.addEventListener('click', tryProcessAndEnter);
+}
+
+/* ============================================================
+   RENDER: APP SHELL
+   ============================================================ */
+function renderApp(){
+  const dataRefStr = STATE.dateList ? STATE.dateList[STATE.dateList.length-1].toLocaleDateString('pt-PT') : '—';
+  const navItems = getNavItems();
+  const navHtml = navItems.map(it => `
+    <button class="nav-item ${STATE.view===it.id?'active':''}" data-view="${it.id}">
+      <span class="num">${it.num}</span>${it.label}
+    </button>`).join('');
+  const mobileNavHtml = navItems.map(it => `
+    <button class="${STATE.view===it.id?'active':''}" data-view-mobile="${it.id}">${it.label}</button>`).join('');
+
+  let body = '';
+  if (STATE.view === 'resumo') body = renderResumo();
+  else if (STATE.view === 'recepcao') body = renderRecepcao();
+  else if (STATE.view === 'forecast') body = renderForecast();
+  else if (STATE.view === 'distribuicaocd' && STATE.cdMap) body = renderDistribuicaoCD();
+  else if (STATE.view === 'parametros') body = renderParametros();
+  else body = renderResumo();
+
+  return `
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="dot"></span>Doca</div>
+      <div class="brand-sub">Banana kg · ${STATE.results.length} lojas</div>
+      <nav class="nav">${navHtml}</nav>
+      <div class="nav-divider"></div>
+      <div class="sidebar-footer">
+        <div class="meta">Vendas até<br><strong style="color:#F2EFE6">${dataRefStr}</strong></div>
+        <button id="btn-reset">Carregar outros ficheiros</button>
+      </div>
+    </aside>
+    <main class="main">
+      <nav class="mobile-nav">${mobileNavHtml}</nav>
+      ${body}
+    </main>
+  </div>`;
+}
+
+function bindAppEvents(){
+  document.querySelectorAll('.nav-item').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ STATE.view = btn.dataset.view; render(); });
+  });
+  document.querySelectorAll('[data-view-mobile]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ STATE.view = btn.dataset.viewMobile; render(); });
+  });
+  const resetBtn = document.getElementById('btn-reset');
+  if (resetBtn) resetBtn.addEventListener('click', ()=>{
+    STATE.loaded = false;
+    STATE.vendasRows = null;
+    STATE.fileErrors = {vendas:null};
+    STATE.fileNames = {vendas:null};
+    STATE.cdMap = null; STATE.fileNamePlanning = null; STATE.fileErrorPlanning = null; STATE.cdMapSource = null;
+    STATE.nomeLoja = {};
+    STATE.lojasHabilitadas = null; STATE.fileNameLojasHabilitadas = null; STATE.fileErrorLojasHabilitadas = null;
+    STATE.stockGravado = {}; STATE.gravacoesPorCD = {}; STATE.distribuicaoEditada = {};
+    STATE.qtdRecebidaPorCD = {}; STATE.stockOverride = {}; STATE.coberturaPorLoja = {};
+    render();
+  });
+  bindViewEvents();
+}
+
+/* ============================================================
+   VIEW: RESUMO
+   ============================================================ */
+function renderResumo(){
+  const r = STATE.results;
+  const unid = unidLabel();
+  const totalLojas = r.length;
+  const stockTotal = r.reduce((s,x)=>s+x.stockAtual,0);
+  const vendaMediaTotal = r.reduce((s,x)=>s+x.mediaReal,0);
+  const forecastTotal = r.reduce((s,x)=>s+x.forecastHorizonte,0);
+  const qtdReceberTotal = r.reduce((s,x)=>s+x.qtdReceberHoje,0);
+  const qtdReceberTotalCx = r.reduce((s,x)=>s+toCaixas(x.qtdReceberHoje),0);
+  const nCritico = r.filter(x=>x.status==='critico').length;
+  const nAbaixo = r.filter(x=>x.status==='abaixo').length;
+  const nOk = r.filter(x=>x.status==='ok').length;
+  const nSemHist = r.filter(x=>x.status==='sem_historico').length;
+
+  const criticas = r.filter(x=>x.status==='critico')
+    .sort((a,b)=> b.qtdReceberHoje - a.qtdReceberHoje)
+    .slice(0,8);
+
+  const rows = criticas.map(x => `
+    <tr>
+      <td class="row-loja">${x.loja}</td>
+      <td>${x.nome}</td>
+      <td class="num">${fmt1(x.stockAtual)}</td>
+      <td class="num">${fmt1(x.mediaReal)}</td>
+      <td class="num">${x.coberturaAtual!==null ? fmt1(x.coberturaAtual)+'d' : '—'}</td>
+      <td class="num" style="font-weight:700; color:var(--action-dark);">${fmt1(x.qtdReceberHoje)}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="eyebrow">Visão geral</div>
+    <h1 class="page-title">Resumo da Rede</h1>
+    <p class="page-sub">${unid === 'CX' ? 'Banana, em caixas (CX)' : `Banana ${unid.toLowerCase()}`} · ${totalLojas} lojas analisadas · stock = distribuições gravadas na aba "Distribuição por CD", descontada a venda prevista dos dias seguintes</p>
+
+    <div class="grid kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Stock atual na rede</div>
+        <div class="kpi-value">${fmtInt(stockTotal)}</div>
+        <div class="kpi-foot">${unid} em ${totalLojas} lojas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Venda média diária</div>
+        <div class="kpi-value">${fmtInt(vendaMediaTotal)}</div>
+        <div class="kpi-foot">${unid} / dia na rede</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Forecast próx. ${STATE.params.horizonte} dias</div>
+        <div class="kpi-value">${fmtInt(forecastTotal)}</div>
+        <div class="kpi-foot">${unid} previstas para vender</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">A receber hoje</div>
+        <div class="kpi-value action">${fmtInt(qtdReceberTotal)}</div>
+        <div class="kpi-foot">${unid === 'CX' ? `${unid} para repor cobertura alvo` : `${unid} · ${fmtInt(qtdReceberTotalCx)} CX para repor cobertura alvo`}</div>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:repeat(4,1fr); margin-bottom:28px;">
+      <div class="kpi-card" style="border-left:3px solid var(--critical);">
+        <div class="kpi-label">Críticas</div>
+        <div class="kpi-value critical">${nCritico}</div>
+        <div class="kpi-foot">≥ 50% do necessário em falta</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid var(--warn);">
+        <div class="kpi-label">Abaixo do alvo</div>
+        <div class="kpi-value" style="color:var(--warn);">${nAbaixo}</div>
+        <div class="kpi-foot">precisam de reforço</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid var(--ok);">
+        <div class="kpi-label">OK</div>
+        <div class="kpi-value" style="color:var(--ok);">${nOk}</div>
+        <div class="kpi-foot">cobertura adequada</div>
+      </div>
+      <div class="kpi-card" style="border-left:3px solid var(--ink-soft);">
+        <div class="kpi-label">Sem histórico</div>
+        <div class="kpi-value" style="color:var(--ink-soft);">${nSemHist}</div>
+        <div class="kpi-foot">a confirmar dados</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Lojas em estado crítico</div>
+          <div class="panel-desc">As 8 lojas com maior quantidade a receber em situação de rutura iminente</div>
+        </div>
+        <button class="filter-btn" data-goto="forecast">Ver todas as lojas →</button>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Loja</th><th>Nome</th><th class="num">Stock (${unid})</th><th class="num">Venda Méd./dia</th>
+              <th class="num">Cobertura</th><th class="num">A Receber Hoje</th>
+            </tr></thead>
+            <tbody>${rows || '<tr><td colspan="6" class="empty-state">Sem lojas em estado crítico — boa notícia.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   VIEW: RECEÇÃO DIÁRIA
+   ============================================================ */
+function renderRecepcao(){
+  const horizonte = STATE.params.horizonte;
+  const lastDate = STATE.dateList[STATE.dateList.length-1];
+  const futureDates = [];
+  for(let t=1;t<=horizonte;t++) futureDates.push(addDays(lastDate,t));
+  const unid = unidLabel();
+  const temCd = !!STATE.cdMap;
+  const jaEmCx = unid === 'CX';
+
+  let rows = STATE.results.slice();
+  if (STATE.search){
+    const q = STATE.search.toLowerCase();
+    rows = rows.filter(x => x.loja.toLowerCase().includes(q) || x.nome.toLowerCase().includes(q));
+  }
+  if (temCd && STATE.cdFilter !== 'all'){
+    rows = rows.filter(x => x.cd === STATE.cdFilter);
+  }
+  rows.sort((a,b)=> b.qtdReceberHoje - a.qtdReceberHoje);
+
+  const totalPorDia = new Array(horizonte).fill(0);
+  rows.forEach(x => x.distribuicaoDiaria.forEach((v,i)=> totalPorDia[i]+=v));
+  const totalGeral = rows.reduce((s,x)=>s+x.qtdReceberHoje,0);
+  const totalGeralCx = rows.reduce((s,x)=>s+toCaixas(x.qtdReceberHoje),0);
+
+  const headDates = futureDates.map(d => `<th class="num">${d.toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'})}<br><span style="font-weight:400; text-transform:none; font-size:10.5px;">${DOW_PT[d.getUTCDay()]}</span></th>`).join('');
+
+  const bodyRows = rows.map(x => {
+    const usaPlanning = !!x.distribuicaoDiariaPlanning;
+    const serieDiaria = usaPlanning ? x.distribuicaoDiariaPlanning : x.distribuicaoDiaria;
+    const cells = serieDiaria.map(v => {
+      if (v === null) return `<td class="num"><span class="muted" title="Sem entrega prevista neste dia (Planning)">S/E</span></td>`;
+      return `<td class="num">${v>0 ? fmtCx(v) : '<span class="muted">–</span>'}</td>`;
+    }).join('');
+    const semHistTag = x.semHistorico ? `<span class="chip chip-neutral" style="margin-left:6px; font-size:10px; padding:2px 6px;">sem histórico</span>` : '';
+    const zeroReason = (x.qtdReceberHoje<=0 && !x.semHistorico) ? `<span class="muted" style="font-size:10.5px; margin-left:6px;">stock OK</span>` : '';
+    return `<tr>
+      <td class="row-loja">${x.loja}</td>
+      <td>${x.nome}${semHistTag}${zeroReason}</td>
+      ${temCd ? `<td>${x.cd||'<span class="muted">—</span>'}</td>` : ''}
+      ${cells}
+      <td class="num" style="font-weight:700; background:var(--action-soft); color:var(--action-dark);">${fmt1(x.qtdReceberHoje)}</td>
+      ${jaEmCx ? '' : `<td class="num" style="font-weight:700; background:var(--warn-soft); color:#7A5A1E;">${fmtCx(x.qtdReceberHoje)}</td>`}
+    </tr>`;
+  }).join('');
+
+  const totalPorDiaCx = new Array(horizonte).fill(0);
+  rows.forEach(x => {
+    const serieDiaria = x.distribuicaoDiariaPlanning || x.distribuicaoDiaria;
+    serieDiaria.forEach((v,i)=> { if (v!==null) totalPorDiaCx[i]+=toCaixas(v); });
+  });
+  const footCells = totalPorDiaCx.map(v => `<td class="num">${fmtInt(v)}</td>`).join('');
+
+  const cdOptions = temCd ? [...new Set(Object.values(STATE.cdMap))].sort() : [];
+  const cdFilterHtml = temCd ? `
+    <select class="search-input" id="filter-cd-recepcao" style="min-width:160px;">
+      <option value="all" ${STATE.cdFilter==='all'?'selected':''}>Todos os CD</option>
+      ${cdOptions.map(cd=>`<option value="${cd}" ${STATE.cdFilter===cd?'selected':''}>${cd}</option>`).join('')}
+    </select>` : '';
+
+  return `
+    <div class="eyebrow">Entregável principal</div>
+    <h1 class="page-title">Receção Diária</h1>
+    <p class="page-sub">Quantidade a receber por loja, em caixas (CX), distribuída dia a dia ao longo dos próximos ${horizonte} dias, proporcional ao perfil de vendas previsto. ${jaEmCx ? 'Todos os valores arredondados sempre para cima.' : `1 CX = ${STATE.params.qtdPorCaixa} ${unid} — todos os valores arredondados sempre para cima.`}${STATE.diasEntregaLoja ? ' Lojas com Planning de Entrega mostram "S/E" nos dias sem entrega prevista.' : ''}</p>
+
+    <div class="toolbar" style="margin:22px 0 16px; justify-content:space-between;">
+      <div class="toolbar">
+        <input class="search-input" id="search-recepcao" placeholder="Procurar loja por código ou nome…" value="${STATE.search}">
+        ${cdFilterHtml}
+        <span class="muted" style="font-size:12.5px;">${rows.length} de ${STATE.results.length} lojas · total: <strong style="color:var(--action-dark);">${fmtInt(totalGeral)} ${unid}</strong>${jaEmCx ? '' : ` · <strong style="color:#7A5A1E;">${fmtInt(totalGeralCx)} CX</strong>`}</span>
+      </div>
+      <div class="toolbar">
+        <button class="filter-btn" id="btn-export-xlsx">⭳ Exportar Excel</button>
+        <button class="filter-btn" id="btn-export-pdf">⭳ Exportar PDF</button>
+      </div>
+    </div>
+
+    <div class="panel" id="recepcao-panel">
+      <div class="table-wrap" style="max-height:70vh;">
+        <table id="recepcao-table">
+          <thead><tr>
+            <th>Loja</th><th>Nome</th>${temCd?'<th>CD</th>':''}${headDates}<th class="num">Total a Receber (${unid})</th>${jaEmCx ? '' : '<th class="num">Total CX</th>'}
+          </tr></thead>
+          <tbody>${bodyRows || `<tr><td colspan="${4+horizonte+(temCd?1:0)}" class="empty-state">Nenhuma loja encontrada.</td></tr>`}</tbody>
+          <tfoot><tr style="background:var(--bg);">
+            <td colspan="${temCd?3:2}" style="font-weight:700;">Total Rede (CX/dia)</td>
+            ${footCells}
+            <td class="num" style="font-weight:700;">${fmtInt(totalGeral)}</td>
+            ${jaEmCx ? '' : `<td class="num" style="font-weight:700;">${fmtInt(totalGeralCx)}</td>`}
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <p class="page-sub" style="margin-top:4px;">As colunas diárias mostram caixas (CX) a entregar nesse dia, arredondadas sempre para cima. ${STATE.diasEntregaLoja ? 'Lojas com Planning de Entrega seguem os seus próprios dias de entrega (S/E = sem entrega nesse dia); o total da semana mantém-se igual ao "Total a Receber".' : 'A distribuição diária reparte a quantidade total proporcionalmente ao forecast de vendas de cada dia.'}</p>
+  `;
+}
+
+/* ============================================================
+   VIEW: FORECAST E STOCK
+   ============================================================ */
+const STATUS_LABEL = {
+  critico: { txt:'Crítico', cls:'chip-critical' },
+  abaixo: { txt:'Abaixo do alvo', cls:'chip-warn' },
+  ok: { txt:'OK', cls:'chip-ok' },
+  sem_historico: { txt:'Sem histórico', cls:'chip-neutral' },
+};
+
+// Gera um <th> clicável para ordenar a tabela "Forecast e Receção" pelo campo indicado.
+// Mostra uma seta (▲ asc / ▼ desc) quando esta é a coluna ativa de ordenação. isNum controla
+// o alinhamento (classe "num"), independente do tipo de comparação usado em SORTABLE.
+function sortableTh(field, label, isNum){
+  const ativo = STATE.sortForecast.field === field;
+  const seta = ativo ? (STATE.sortForecast.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  return `<th class="${isNum?'num ':''}sortable-th${ativo?' sorted':''}" data-sort-field="${field}" title="Ordenar por ${label}">${label}${seta}</th>`;
+}
+
+function renderForecast(){
+  const unid = unidLabel();
+  const temCd = !!STATE.cdMap;
+  const jaEmCx = unid === 'CX';
+  let rows = STATE.results.slice();
+  if (STATE.search){
+    const q = STATE.search.toLowerCase();
+    rows = rows.filter(x => x.loja.toLowerCase().includes(q) || x.nome.toLowerCase().includes(q));
+  }
+  if (STATE.statusFilter !== 'all'){
+    rows = rows.filter(x => x.status === STATE.statusFilter);
+  }
+  if (temCd && STATE.cdFilter !== 'all'){
+    rows = rows.filter(x => x.cd === STATE.cdFilter);
+  }
+
+  // Colunas ordenáveis: campo no objeto x (ou função extratora) + tipo, para saber comparar
+  // como texto ou como número. Clicar numa coluna ordena por ela; clicar de novo inverte a
+  // direção. Sem ordenação escolhida, mantém a ordenação padrão por criticidade do status.
+  const SORTABLE = {
+    loja: { get: x => x.loja, type: 'text' },
+    nome: { get: x => x.nome, type: 'text' },
+    cd: { get: x => x.cd || '', type: 'text' },
+    stock: { get: x => x.stockAtual, type: 'num' },
+    mediaReal: { get: x => x.mediaReal, type: 'num' },
+    coberturaAlvo: { get: x => x.coberturaAlvo, type: 'num' },
+    slope: { get: x => x.slope, type: 'num' },
+    forecastDia1: { get: x => x.forecastDia1, type: 'num' },
+    coberturaAtual: { get: x => x.coberturaAtual, type: 'num' },
+    status: { get: x => x.status, type: 'text' },
+    forecastHorizonte: { get: x => x.forecastHorizonte, type: 'num' },
+    stockNecessario: { get: x => x.stockNecessario, type: 'num' },
+    qtdReceberHoje: { get: x => x.qtdReceberHoje, type: 'num' },
+  };
+
+  if (STATE.sortForecast.field && SORTABLE[STATE.sortForecast.field]){
+    const { get, type } = SORTABLE[STATE.sortForecast.field];
+    const dirMult = STATE.sortForecast.dir === 'asc' ? 1 : -1;
+    rows.sort((a,b) => {
+      let va = get(a), vb = get(b);
+      if (type === 'num'){
+        va = (va===null || va===undefined || isNaN(va)) ? -Infinity : va;
+        vb = (vb===null || vb===undefined || isNaN(vb)) ? -Infinity : vb;
+        return (va-vb) * dirMult;
+      }
+      return String(va).localeCompare(String(vb), 'pt-PT') * dirMult;
+    });
+  } else {
+    rows.sort((a,b)=>{
+      const order = {critico:0, abaixo:1, sem_historico:2, ok:3};
+      return order[a.status]-order[b.status] || b.qtdReceberHoje-a.qtdReceberHoje;
+    });
+  }
+
+  const filters = [
+    {id:'all', label:'Todas'},
+    {id:'critico', label:'Críticas'},
+    {id:'abaixo', label:'Abaixo do alvo'},
+    {id:'ok', label:'OK'},
+    {id:'sem_historico', label:'Sem histórico'},
+  ];
+  const filterBtns = filters.map(f => `<button class="filter-btn ${STATE.statusFilter===f.id?'active':''}" data-status="${f.id}">${f.label}</button>`).join('');
+
+  const cdOptions = temCd ? [...new Set(Object.values(STATE.cdMap))].sort() : [];
+  const cdFilterHtml = temCd ? `
+    <select class="search-input" id="filter-cd-forecast" style="min-width:140px;">
+      <option value="all" ${STATE.cdFilter==='all'?'selected':''}>Todos os CD</option>
+      ${cdOptions.map(cd=>`<option value="${cd}" ${STATE.cdFilter===cd?'selected':''}>${cd}</option>`).join('')}
+    </select>` : '';
+
+  const bodyRows = rows.map(x => {
+    const st = STATUS_LABEL[x.status];
+    const alertMsg = x.semHistorico ? 'Sem histórico de vendas — stock mínimo de segurança garantido' : (x.stockNegativo && !x.stockEditado ? 'Stock negativo no SAP — verificar ajuste' : '');
+    return `<tr data-loja="${x.loja}">
+      <td class="row-loja">${x.loja}</td>
+      <td>${x.nome}</td>
+      ${temCd ? `<td>${x.cd||'<span class="muted">—</span>'}</td>` : ''}
+      <td class="num"><input class="cell-input stock-input ${x.stockEditado?'edited':''}" data-loja="${x.loja}" type="number" min="0" step="0.1" value="${Math.round((x.stockAtual/(STATE.params.qtdPorCaixa||1))*10)/10}" title="${x.stockEditado?'Valor editado manualmente':'Acumulado das distribuições gravadas (menos venda prevista dos dias seguintes) — clique para editar'}${jaEmCx?'':` · equivale a ${fmt1(x.stockAtual)} ${unid}`}"></td>
+      <td class="num">${fmt1(x.mediaReal)}</td>
+      <td class="num"><input class="cell-input cov-input" data-loja="${x.loja}" type="number" min="1" max="30" value="${x.coberturaAlvo}"></td>
+      <td class="num">${x.slope>=0?'+':''}${x.slope.toFixed(2)}</td>
+      <td class="num">${fmt1(x.forecastDia1)}</td>
+      <td class="num">${x.coberturaAtual!==null ? fmt1(x.coberturaAtual) : '—'}</td>
+      <td><span class="chip ${st.cls}">${st.txt}</span></td>
+      <td class="num">${fmt1(x.forecastHorizonte)}</td>
+      <td class="num">${fmt1(x.stockNecessario)}</td>
+      <td class="num" style="font-weight:700; color:var(--action-dark);">${fmt1(x.qtdReceberHoje)}</td>
+      ${jaEmCx ? '' : `<td class="num" style="font-weight:700; color:#7A5A1E;">${fmtCx(x.qtdReceberHoje)}</td>`}
+      <td style="font-size:11.5px; color:var(--critical);">${alertMsg}</td>
+    </tr>`;
+  }).join('');
+
+  const nStockEditado = rows.filter(x=>x.stockEditado).length;
+
+  return `
+    <div class="eyebrow">Detalhe por loja</div>
+    <h1 class="page-title">Forecast e Receção</h1>
+    <p class="page-sub">O stock de cada loja é o acumulado das distribuições <b>gravadas</b> na aba "Distribuição por CD", descontando a venda prevista dos dias seguintes a cada gravação. Cobertura alvo e stock continuam editáveis por loja (clique na célula). O status reflete a proporção em falta face ao necessário, não a cobertura atual.</p>
+
+    <div class="toolbar" style="margin:22px 0 16px; justify-content:space-between;">
+      <div class="toolbar">
+        <input class="search-input" id="search-forecast" placeholder="Procurar loja por código ou nome…" value="${STATE.search}">
+        ${cdFilterHtml}
+        ${nStockEditado>0 ? `<button class="filter-btn" id="btn-reset-stock" style="color:var(--gold); border-color:var(--gold);">↺ Repor stock calculado (${nStockEditado} editado${nStockEditado>1?'s':''})</button>` : ''}
+      </div>
+      <div class="toolbar">
+        ${filterBtns}
+        <button class="filter-btn" id="btn-export-forecast-xlsx">⭳ Excel</button>
+        <button class="filter-btn" id="btn-export-forecast-pdf">⭳ PDF</button>
+      </div>
+    </div>
+
+    <div class="panel" id="forecast-panel">
+      <div class="table-wrap" style="max-height:72vh;">
+        <table id="forecast-table">
+          <thead><tr>
+            ${sortableTh('loja','Loja')}${sortableTh('nome','Nome')}${temCd?sortableTh('cd','CD'):''}${sortableTh('stock','Stock (CX)',true)}${sortableTh('mediaReal','Venda Méd./dia',true)}
+            ${sortableTh('coberturaAlvo','Cobertura Alvo',true)}${sortableTh('slope','Tendência',true)}${sortableTh('forecastDia1','Forecast D+1',true)}
+            ${sortableTh('coberturaAtual','Cobertura Atual',true)}${sortableTh('status','Status')}${sortableTh('forecastHorizonte',`Forecast ${STATE.params.horizonte}d`,true)}
+            ${sortableTh('stockNecessario','Stock Necessário',true)}${sortableTh('qtdReceberHoje','A Receber Hoje',true)}${jaEmCx ? '' : '<th class="num">CX a Receber</th>'}<th>Alerta</th>
+          </tr></thead>
+          <tbody>${bodyRows || `<tr><td colspan="${jaEmCx?14:15}" class="empty-state">Nenhuma loja corresponde ao filtro.</td></tr>`}</tbody>
+        </table>
+      </div>
+
+    </div>
+
+    ${renderCalendarioSemanalSection(rows, temCd)}
+    ${renderTotalPorCDSection(rows, temCd)}
+  `;
+}
+
+/* ============================================================
+   SECÇÃO: CALENDÁRIO SEMANAL DE ENTREGA POR LOJA (Planning de Entrega)
+   ============================================================ */
+function renderCalendarioSemanalSection(rows, temCd){
+  const lojasComCalendario = rows.filter(x => x.calendarioSemanal);
+  if (lojasComCalendario.length === 0) return '';
+
+  const unid = unidLabel();
+  const jaEmCx = unid === 'CX';
+  const qpc = STATE.params.qtdPorCaixa || 1;
+  const diasCD = STATE.params.diasEntregaCD || [];
+  const diasCDLabel = diasCD.length>0 ? diasCD.join(', ') : 'nenhum definido';
+
+  const headDias = DOW_SEMANA.map(d => `<th class="num">${d}</th>`).join('');
+
+  const bodyRows = lojasComCalendario.map(x => {
+    const calc = computeCalendarioSemanalCx(x);
+    const celulas = DOW_SEMANA.map((d,idx) => {
+      const info = x.calendarioSemanal[idx];
+      if (!info) return { cx: null, kg: null, titulo: null, atingiuMax: false };
+      const r = calc.porIdx[idx];
+      const coberturaTxt = info.diasCobertos.length>1
+        ? `cobre ${info.diasCobertos.map(i=>DOW_SEMANA[i]).join('+')}`
+        : `cobre ${DOW_SEMANA[info.diasCobertos[0]]}`;
+      const motivos = [];
+      if (r.atingiuLimiteDiario) motivos.push(`limitado ao máximo de ${STATE.params.maxCxDiaCalendario} CX/dia (necessidade real: ${toCaixas(info.qtd)} CX)`);
+      if (r.atingiuLimiteSemanal) motivos.push(`reduzido para não exceder o limite semanal de ${calc.limiteSemanal} CX (venda méd. semanal ${calc.vendaMediaSemanalCx} CX + ${STATE.params.maxExcedenteVendaSemanal} CX)`);
+      const atingiuMax = motivos.length>0;
+      const titulo = atingiuMax ? `${coberturaTxt} · ${motivos.join(' · ')}` : coberturaTxt;
+      return { cx: r.cxFinal, kg: Math.round(r.cxFinal*qpc*10)/10, titulo, atingiuMax };
+    });
+    const totalExcedeu = (calc.limiteSemanal !== null && calc.total >= calc.limiteSemanal && calc.total > calc.vendaMediaSemanalCx);
+    const totalKg = Math.round(calc.total*qpc*10)/10;
+    const vendaMediaSemanal = x.mediaReal * 7;
+    const vendaMediaDiaCx = toCaixas(x.mediaReal);
+    const vendaMediaSemanalCx = toCaixas(vendaMediaSemanal);
+
+    const linhaCx = celulas.map(c => {
+      if (c.cx === null) return `<td class="num"><span class="muted">–</span></td>`;
+      return `<td class="num" title="${c.titulo}"><span style="font-weight:700; color:${c.atingiuMax?'var(--warn)':'var(--action-dark)'};">${c.cx<=0?'0':Math.round(c.cx).toLocaleString('pt-PT')}</span>${c.atingiuMax ? ' <span style="font-size:10px;">⚠</span>' : ''}</td>`;
+    }).join('');
+    const linhaKg = celulas.map(c => {
+      if (c.kg === null) return `<td class="num" style="border-top:none; padding-top:0;"></td>`;
+      return `<td class="num" style="border-top:none; padding-top:0;"><span class="muted" style="font-size:10px;">${fmt1(c.kg)}</span></td>`;
+    }).join('');
+
+    return `<tr>
+      <td class="row-loja" rowspan="2" style="vertical-align:top;">${x.cd||'<span class="muted">—</span>'}<br><span class="muted" style="font-weight:400; font-size:12px;">${x.loja}</span></td>
+      <td class="num" rowspan="2" style="vertical-align:top;" title="Venda média diária prevista para esta loja"><span style="font-weight:700;">${vendaMediaDiaCx<=0?'0':Math.round(vendaMediaDiaCx).toLocaleString('pt-PT')}</span>${jaEmCx ? '' : `<br><span class="muted" style="font-size:10px;">${fmt1(x.mediaReal)} ${unid}</span>`}</td>
+      <td class="num" rowspan="2" style="vertical-align:top;" title="Venda média diária × 7 dias"><span style="font-weight:700;">${vendaMediaSemanalCx<=0?'0':Math.round(vendaMediaSemanalCx).toLocaleString('pt-PT')}</span>${jaEmCx ? '' : `<br><span class="muted" style="font-size:10px;">${fmt1(vendaMediaSemanal)} ${unid}</span>`}</td>
+      ${linhaCx}
+      <td class="num"><span style="font-weight:700; color:${totalExcedeu?'var(--warn)':'var(--action-dark)'};">${Math.round(calc.total).toLocaleString('pt-PT')}</span> <span class="muted" style="font-size:10px;">CX</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--line-soft);">
+      ${linhaKg}
+      <td class="num" style="border-top:none; padding-top:0;"><span class="muted" style="font-size:10px;">${fmt1(totalKg)} ${unid}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="panel" id="calendario-semanal-panel" style="margin-top:22px;">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Calendário Semanal de Entrega por Loja</div>
+          <div class="panel-desc">Com base no Planning de Entrega: cada dia de entrega de uma loja cobre o forecast de vendas até à entrega seguinte da mesma loja. CD recebe do fornecedor às ${diasCDLabel} — a distribuição às lojas ocorre no dia seguinte (D+1) a cada uma dessas entregas.${(STATE.params.maxCxDiaCalendario !== null && STATE.params.maxCxDiaCalendario !== undefined && STATE.params.maxCxDiaCalendario !== '') ? ` Sugestão diária limitada a um máximo de ${STATE.params.maxCxDiaCalendario} CX por loja.` : ''}${(STATE.params.maxExcedenteVendaSemanal !== null && STATE.params.maxExcedenteVendaSemanal !== undefined && STATE.params.maxExcedenteVendaSemanal !== '') ? ` Total semanal limitado à venda média semanal + ${STATE.params.maxExcedenteVendaSemanal} CX.` : ''}${(STATE.params.maxCxDiaCalendario !== null && STATE.params.maxCxDiaCalendario !== undefined && STATE.params.maxCxDiaCalendario !== '') || (STATE.params.maxExcedenteVendaSemanal !== null && STATE.params.maxExcedenteVendaSemanal !== undefined && STATE.params.maxExcedenteVendaSemanal !== '') ? ' ⚠ indica dias/totais em que a sugestão foi reduzida por um destes limites.' : ''}</div>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <div class="table-wrap" style="max-height:60vh;">
+          <table>
+            <thead><tr>
+              <th>CD / Loja</th><th class="num">Venda Méd./dia</th><th class="num">Venda Méd. Semanal</th>${headDias}<th class="num">Total Semana</th>
+            </tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel-body" style="padding-top:0; border-top:1px solid var(--line-soft);">
+        <p class="page-sub" style="margin:0;">Em cada loja, a linha de cima mostra as caixas (CX) a enviar nesse dia da semana e a linha de baixo a quantidade correspondente em ${unid}, calculada para cobrir o período até à entrega seguinte da mesma loja. Lojas sem dias de entrega definidos no Planning não aparecem aqui — ${rows.length - lojasComCalendario.length} loja${rows.length-lojasComCalendario.length!==1?'s':''} sem essa informação.</p>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   SECÇÃO: TOTAL DE CAIXAS POR CD E DIA DA SEMANA
+   Agrega o Calendário Semanal de Entrega por Loja somando todas as lojas de cada CD,
+   dia a dia — útil para dimensionar o que cada CD precisa enviar/preparar por dia.
+   ============================================================ */
+function renderTotalPorCDSection(rows, temCd){
+  if (!temCd) return '';
+  const diasCD = STATE.params.diasEntregaCD || [];
+  const idxDiasCD = diasCD.map(d => DOW_SEMANA.indexOf(d)).filter(i => i>=0).sort((a,b)=>a-b);
+  if (idxDiasCD.length === 0) return '';
+  const agregados = computeTotalCxPorCDEDia(rows);
+  if (agregados.length === 0) return '';
+  const unid = unidLabel();
+  const jaEmCx = unid === 'CX';
+
+  const headDias = idxDiasCD.map(idx => `<th class="num">${DOW_SEMANA[idx]}</th>`).join('');
+  const bodyRows = agregados.map(agr => {
+    const cellsCx = idxDiasCD.map(idx => {
+      const v = agr.porDiaCD[idx] || 0;
+      return `<td class="num" title="Receção no CD a ${DOW_SEMANA[idx]} → distribuição às lojas a ${DOW_SEMANA[(idx+1)%7]} (D+1)">${v<=0?'<span class="muted">–</span>':`<span style="font-weight:700; color:var(--action-dark);">${Math.round(v).toLocaleString('pt-PT')}</span>`}</td>`;
+    }).join('');
+    if (jaEmCx){
+      return `<tr>
+        <td class="row-loja">${agr.cd}</td>
+        <td class="num">${agr.nLojas}</td>
+        ${cellsCx}
+        <td class="num" style="font-weight:700; color:var(--action-dark);">${Math.round(agr.total).toLocaleString('pt-PT')}</td>
+      </tr>`;
+    }
+    const cellsQtd = idxDiasCD.map(idx => {
+      const v = agr.porDiaCDQtd[idx] || 0;
+      return `<td class="num" style="border-top:none; padding-top:0;">${v<=0?'':`<span class="muted" style="font-size:10px;">${fmt1(v)}</span>`}</td>`;
+    }).join('');
+    return `<tr>
+      <td class="row-loja" rowspan="2" style="vertical-align:top;">${agr.cd}</td>
+      <td class="num" rowspan="2" style="vertical-align:top;">${agr.nLojas}</td>
+      ${cellsCx}
+      <td class="num"><span style="font-weight:700; color:var(--action-dark);">${Math.round(agr.total).toLocaleString('pt-PT')}</span> <span class="muted" style="font-size:10px;">CX</span></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--line-soft);">
+      ${cellsQtd}
+      <td class="num" style="border-top:none; padding-top:0;"><span class="muted" style="font-size:10px;">${fmt1(agr.totalQtd)} ${unid}</span></td>
+    </tr>`;
+  }).join('');
+  const totalGeralPorDiaCx = idxDiasCD.map(idx => agregados.reduce((s,a)=>s+(a.porDiaCD[idx]||0),0));
+  const totalGeralPorDiaQtd = idxDiasCD.map(idx => agregados.reduce((s,a)=>s+(a.porDiaCDQtd[idx]||0),0));
+  const totalGeralCx = agregados.reduce((s,a)=>s+a.total,0);
+  const totalGeralQtd = agregados.reduce((s,a)=>s+a.totalQtd,0);
+  const footRow = jaEmCx ? `<tr style="background:var(--bg);">
+    <td style="font-weight:700;">Total Geral</td>
+    <td class="num" style="font-weight:700;">${agregados.reduce((s,a)=>s+a.nLojas,0)}</td>
+    ${totalGeralPorDiaCx.map(v=>`<td class="num" style="font-weight:700;">${Math.round(v).toLocaleString('pt-PT')}</td>`).join('')}
+    <td class="num" style="font-weight:700;">${Math.round(totalGeralCx).toLocaleString('pt-PT')}</td>
+  </tr>` : `<tr style="background:var(--bg);">
+    <td style="font-weight:700;" rowspan="2">Total Geral</td>
+    <td class="num" style="font-weight:700;" rowspan="2">${agregados.reduce((s,a)=>s+a.nLojas,0)}</td>
+    ${totalGeralPorDiaCx.map(v=>`<td class="num" style="font-weight:700;">${Math.round(v).toLocaleString('pt-PT')}</td>`).join('')}
+    <td class="num" style="font-weight:700;">${Math.round(totalGeralCx).toLocaleString('pt-PT')} CX</td>
+  </tr>
+  <tr style="background:var(--bg);">
+    ${totalGeralPorDiaQtd.map(v=>`<td class="num" style="border-top:none; padding-top:0;"><span class="muted" style="font-size:10px;">${fmt1(v)}</span></td>`).join('')}
+    <td class="num" style="border-top:none; padding-top:0;"><span class="muted" style="font-size:10px;">${fmt1(totalGeralQtd)} ${unid}</span></td>
+  </tr>`;
+
+  return `
+    <div class="panel" id="total-por-cd-panel" style="margin-top:22px;">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Total de Caixas por CD e Dia da Semana</div>
+          <div class="panel-desc">${jaEmCx ? `Quantidade de caixas (CX) que cada CD precisa de receber do fornecedor em cada dia configurado em "Dias em que o CD recebe do fornecedor" (${diasCD.join(', ') || 'nenhum definido'})` : `Forecast de vendas (${unid}) e o respetivo equivalente em caixas (CX) que cada CD precisa de receber do fornecedor em cada dia configurado em "Dias em que o CD recebe do fornecedor" (${diasCD.join(', ') || 'nenhum definido'})`} — calculado a partir do que as lojas desse CD vão receber no dia seguinte (D+1).${jaEmCx ? ' Já com os limites diário e de excedente semanal aplicados no Calendário Semanal de Entrega por Loja.' : ` A linha de CX já reflete os limites diário e de excedente semanal aplicados no Calendário Semanal de Entrega por Loja; a linha de ${unid} é o forecast de vendas puro, sem esses limites.`}</div>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <div class="table-wrap" style="max-height:40vh;">
+          <table>
+            <thead><tr>
+              <th>CD</th><th class="num">Nº Lojas</th>${headDias}<th class="num">Total</th>
+            </tr></thead>
+            <tbody>${bodyRows}</tbody>
+            <tfoot>${footRow}</tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   CALCULO: DISTRIBUIÇÃO POR CD
+   ============================================================ */
+// Devolve a necessidade (qtd a receber) de uma loja para a proxima ocorrencia de um dado dia da
+// semana ('Seg'..'Dom'), usando a serie distribuicaoDiariaPlanning ja alinhada a datas concretas
+// (Receção Diária). Se a loja nao tiver Planning ou nao tiver entrega nesse dia, devolve null.
+function necessidadeLojaNoDiaSemana(loja, diaSemana){
+  if (!loja.distribuicaoDiariaPlanning) return null;
+  const lastDate = STATE.dateList[STATE.dateList.length-1];
+  const idxDiaAlvo = DOW_SEMANA.indexOf(diaSemana);
+  if (idxDiaAlvo < 0) return null;
+  // procura, dentro do horizonte ja calculado, a primeira data cujo dia da semana coincide
+  for (let t=0; t<loja.distribuicaoDiariaPlanning.length; t++){
+    const d = addDays(lastDate, t+1);
+    const idxSemana = (d.getUTCDay()+6) % 7;
+    if (idxSemana === idxDiaAlvo){
+      const v = loja.distribuicaoDiariaPlanning[t];
+      return v === null ? null : v;
+    }
+  }
+  return null;
+}
+
+function computeDistribuicaoPorCD(cd, diaSemana){
+  let lojasCD = STATE.results.filter(x => x.cd === cd);
+  let necessidadePorLoja; // array alinhado com lojasCD
+
+  if (diaSemana){
+    // Filtra apenas lojas que tem entrega nesse dia da semana (segundo o Planning)
+    lojasCD = lojasCD.filter(x => x.diasEntrega && x.diasEntrega.includes(diaSemana));
+    necessidadePorLoja = lojasCD.map(x => necessidadeLojaNoDiaSemana(x, diaSemana) || 0);
+  } else {
+    necessidadePorLoja = lojasCD.map(x => x.qtdReceberHoje);
+  }
+
+  const necessidadeTotal = necessidadePorLoja.reduce((a,b)=>a+b,0);
+  const chaveQtd = diaSemana ? `${cd}__${diaSemana}` : cd;
+  const qtdRecebidaCx = STATE.qtdRecebidaPorCD[chaveQtd];
+  const temQtdRecebida = (qtdRecebidaCx !== undefined && qtdRecebidaCx !== null && qtdRecebidaCx !== '');
+  const qpc = STATE.params.qtdPorCaixa || 1;
+  // A quantidade recebida é lançada manualmente em caixas (CX) e convertida para a unidade
+  // base (UN/KG) para ser comparada/distribuída face à necessidade, que está sempre em unidade base.
+  const qtdRecebidaNum = temQtdRecebida ? Math.max(0, Number(qtdRecebidaCx) * qpc) : necessidadeTotal;
+
+  let distribuicao;
+  let modo;
+  if (qtdRecebidaNum >= necessidadeTotal){
+    // Quantidade suficiente: cada loja recebe exatamente o que precisava
+    modo = 'suficiente';
+    distribuicao = lojasCD.map((x,i) => ({ loja:x, qtd: necessidadePorLoja[i] }));
+  } else {
+    // Quantidade insuficiente: 1) garantir a falta de stock mínimo de segurança a quem precisa,
+    // 2) distribuir o restante por venda média. Lojas que já têm stock OK (necessidade=0)
+    // nunca recebem nada nesta fase de segurança — só entram na fase de venda média se sobrar.
+    modo = 'insuficiente';
+    const segGlobal = STATE.params.stockMinSeg;
+    let restante = qtdRecebidaNum;
+
+    // Falta de seguranca por loja: se o stock atual estiver abaixo do minimo de seguranca,
+    // assume-se a quantidade TOTAL definida no Stock Mínimo de Segurança (não apenas a diferença
+    // até lá chegar). Nunca mais do que a propria necessidade da loja nesse dia (uma loja com
+    // stock OK, ou já acima do mínimo, tem falta = 0).
+    const faltaSeg = lojasCD.map((x,i)=> Math.min(necessidadePorLoja[i], x.stockAtual < segGlobal ? segGlobal : 0));
+    const totalFaltaSeg = faltaSeg.reduce((a,b)=>a+b,0);
+
+    let segAlocada;
+    if (totalFaltaSeg <= 0){
+      segAlocada = lojasCD.map(()=>0);
+    } else if (restante >= totalFaltaSeg){
+      segAlocada = faltaSeg.slice();
+      restante -= totalFaltaSeg;
+    } else {
+      // nao chega para cobrir a falta de seguranca de todas as que precisam: rateia
+      // proporcionalmente a propria falta de seguranca de cada loja (nao a venda media,
+      // para nao excluir lojas sem historico que tem mediaReal=0 mas precisam de seguranca).
+      segAlocada = lojasCD.map((x,i)=> faltaSeg[i]>0 ? restante * (faltaSeg[i]/totalFaltaSeg) : 0);
+      restante = 0;
+    }
+
+    // Restante (apos cobrir a seguranca) distribuido proporcionalmente a venda media de TODAS as lojas
+    // (incluindo as que ja tinham seguranca garantida, para repor o que ainda falta da sua necessidade total).
+    const restanteNecessidade = lojasCD.map((x,i)=> Math.max(0, necessidadePorLoja[i] - segAlocada[i]));
+    const totalRestanteNecessidade = restanteNecessidade.reduce((a,b)=>a+b,0);
+    let extraPorLoja;
+    if (totalRestanteNecessidade>0){
+      extraPorLoja = lojasCD.map((x,i)=> Math.min(restanteNecessidade[i], restante * (restanteNecessidade[i]/totalRestanteNecessidade)));
+    } else {
+      extraPorLoja = lojasCD.map(()=>0);
+    }
+
+    distribuicao = lojasCD.map((x,i) => ({ loja:x, qtd: Math.round((segAlocada[i] + extraPorLoja[i])*10)/10 }));
+  }
+
+  // Limite manual de caixas por dia (STATE.params.maxCxDiaDistribuicaoCD) — aplicado apenas
+  // quando um dia específico da semana está selecionado (diaSemana), já que no modo "Todos os
+  // dias" o valor mostrado é o total do período, não de um único dia de entrega.
+  const maxCx = STATE.params.maxCxDiaDistribuicaoCD;
+  const temLimiteDia = diaSemana && (maxCx !== null && maxCx !== undefined && maxCx !== '' && !isNaN(maxCx));
+  if (temLimiteDia){
+    const qpc2 = STATE.params.qtdPorCaixa || 1;
+    const maxQtd = maxCx * qpc2;
+    distribuicao = distribuicao.map(d => {
+      const atingiuMax = d.qtd > maxQtd;
+      return atingiuMax ? { ...d, qtd: maxQtd, atingiuMaxDia: true, qtdAntesLimite: d.qtd } : d;
+    });
+  }
+
+  return { lojasCD, necessidadeTotal, necessidadePorLoja, qtdRecebida: qtdRecebidaNum, temQtdRecebida, modo, distribuicao };
+}
+
+// Aplica as edições manuais da coluna "CX a Distribuir" sobre a distribuição calculada.
+// Devolve, por loja: cxSugerido (cálculo), cxFinal (edição ou sugestão), qtdFinal (unid. base)
+// e a flag editado. A quantidade final em unidade base de uma linha editada é cx × qtd/caixa.
+function aplicarEdicoesDistribuicao(distribuicao, chave){
+  const qpc = STATE.params.qtdPorCaixa || 1;
+  const edits = STATE.distribuicaoEditada[chave] || {};
+  return distribuicao.map(d => {
+    const cxSugerido = toCaixas(d.qtd);
+    const editado = (d.loja.loja in edits);
+    const cxFinal = editado ? edits[d.loja.loja] : cxSugerido;
+    const qtdFinal = editado ? Math.round(cxFinal * qpc * 10)/10 : d.qtd;
+    return { ...d, cxSugerido, cxFinal, qtdFinal, editado };
+  });
+}
+
+// Grava a distribuição atual de um CD: acumula, por loja, a quantidade "a distribuir" (com as
+// edições manuais aplicadas) no stock gravado, com a data de hoje. O stock da aba "Forecast e
+// Receção" passa a refletir este acumulado, descontando a venda prevista dos dias seguintes.
+function gravarDistribuicaoCD(cd){
+  const temPlanning = !!STATE.diasEntregaLoja;
+  const diaSelecionado = STATE.diaCDSelecionado && STATE.diaCDSelecionado[cd] ? STATE.diaCDSelecionado[cd] : null;
+  const diaParaCalculo = (temPlanning && diaSelecionado && diaSelecionado !== 'Todos os dias') ? diaSelecionado : null;
+  const chave = diaParaCalculo ? `${cd}__${diaParaCalculo}` : cd;
+
+  const { distribuicao } = computeDistribuicaoPorCD(cd, diaParaCalculo);
+  const final = aplicarEdicoesDistribuicao(distribuicao, chave);
+  const hoje = dateKey(new Date());
+  let totalCx = 0;
+  final.forEach(d => {
+    if (!d.qtdFinal || d.qtdFinal <= 0) return;
+    if (!STATE.stockGravado[d.loja.loja]) STATE.stockGravado[d.loja.loja] = [];
+    STATE.stockGravado[d.loja.loja].push({ qtd: d.qtdFinal, data: hoje, cd });
+    totalCx += d.cxFinal;
+  });
+  if (!STATE.gravacoesPorCD[cd]) STATE.gravacoesPorCD[cd] = [];
+  STATE.gravacoesPorCD[cd].push({ data: new Date().toISOString(), totalCx, dia: diaParaCalculo || 'Todos os dias' });
+  recalcAndRender();
+}
+
+// Remove todas as gravações de um CD (do log e do stock acumulado das lojas).
+function limparGravacoesCD(cd){
+  Object.keys(STATE.stockGravado).forEach(loja => {
+    STATE.stockGravado[loja] = STATE.stockGravado[loja].filter(e => e.cd !== cd);
+    if (STATE.stockGravado[loja].length === 0) delete STATE.stockGravado[loja];
+  });
+  delete STATE.gravacoesPorCD[cd];
+  recalcAndRender();
+}
+
+function renderDistribuicaoCD(){
+  const unid = unidLabel();
+  const jaEmCx = unid === 'CX';
+  const cdList = [...new Set(Object.values(STATE.cdMap))].sort();
+  const temPlanning = !!STATE.diasEntregaLoja;
+
+  const dayOptions = ['Todos os dias', ...DOW_SEMANA];
+
+  const blocks = cdList.map(cd => {
+    const diaSelecionado = STATE.diaCDSelecionado && STATE.diaCDSelecionado[cd] ? STATE.diaCDSelecionado[cd] : null;
+    const diaParaCalculo = (temPlanning && diaSelecionado && diaSelecionado !== 'Todos os dias') ? diaSelecionado : null;
+
+    const { lojasCD, necessidadeTotal, necessidadePorLoja, qtdRecebida, temQtdRecebida, modo, distribuicao } = computeDistribuicaoPorCD(cd, diaParaCalculo);
+    const chaveQtd = diaParaCalculo ? `${cd}__${diaParaCalculo}` : cd;
+    const comEdicoes = aplicarEdicoesDistribuicao(distribuicao, chaveQtd);
+    const sorted = comEdicoes
+      .map((d,i)=> ({...d, necessidade: necessidadePorLoja[i]}))
+      .sort((a,b)=> b.qtdFinal - a.qtdFinal);
+    const totalDistribuido = comEdicoes.reduce((s,d)=>s+d.qtdFinal,0);
+    const totalDistribuidoCx = comEdicoes.reduce((s,d)=>s+d.cxFinal,0);
+    const nEditadas = comEdicoes.filter(d=>d.editado).length;
+
+    const daySelectorHtml = temPlanning ? `
+      <select class="search-input day-cd-select" data-cd="${cd}" style="min-width:140px;">
+        ${dayOptions.map(d => `<option value="${d}" ${(diaSelecionado||'Todos os dias')===d?'selected':''}>${d==='Todos os dias'?d:'Dia: '+d}</option>`).join('')}
+      </select>` : '';
+
+    const rows = sorted.map(d => {
+      const inputTitle = d.editado
+        ? `Editado manualmente (sugestão calculada: ${d.cxSugerido} CX) — apague o valor para repor a sugestão`
+        : 'Sugestão calculada — clique para editar as caixas a distribuir a esta loja';
+      const inputCx = `<input class="cell-input dist-cx-input ${d.editado?'edited':''}" data-chave="${chaveQtd}" data-loja="${d.loja.loja}" type="number" min="0" step="1" value="${d.cxFinal}" title="${inputTitle}">`;
+      return `
+      <tr>
+        <td class="row-loja">${d.loja.loja}</td>
+        <td>${d.loja.nome}</td>
+        ${diaParaCalculo ? `<td style="font-size:11px;">${(d.loja.diasEntrega||[]).join(', ')}</td>` : ''}
+        <td class="num">${fmt1(d.loja.mediaReal)}</td>
+        <td class="num">${fmt1(d.necessidade)}</td>
+        ${jaEmCx
+          ? `<td class="num">${inputCx}${d.atingiuMaxDia && !d.editado ? ` <span style="font-size:10px;" title="Limitado ao máximo de ${STATE.params.maxCxDiaDistribuicaoCD} CX/dia">⚠</span>` : ''}</td>`
+          : `<td class="num" title="${d.atingiuMaxDia && !d.editado ? `Limitado ao máximo de ${STATE.params.maxCxDiaDistribuicaoCD} CX/dia (sem limite seria ${fmt1(d.qtdAntesLimite)} ${unid})` : ''}"><span style="font-weight:700; color:${d.editado?'#8A5A12':(d.atingiuMaxDia?'var(--warn)':'var(--action-dark)')};">${fmt1(d.qtdFinal)}</span>${d.atingiuMaxDia && !d.editado ? ' <span style="font-size:10px;">⚠</span>' : ''}</td>
+        <td class="num">${inputCx}</td>`}
+      </tr>`;
+    }).join('');
+
+    const modoChip = modo==='suficiente'
+      ? `<span class="chip chip-ok">Quantidade suficiente</span>`
+      : `<span class="chip chip-critical">Quantidade insuficiente — rateio aplicado</span>`;
+
+    const semLojasNoDia = diaParaCalculo && lojasCD.length === 0;
+    const gravacoes = STATE.gravacoesPorCD[cd] || [];
+    const totalGravadoCx = gravacoes.reduce((s,g)=>s+g.totalCx,0);
+    const ultimaGravacao = gravacoes.length ? new Date(gravacoes[gravacoes.length-1].data) : null;
+    const gravadoInfo = gravacoes.length
+      ? ` · <span style="color:var(--action-dark); font-weight:600;">gravado: ${fmtInt(totalGravadoCx)} CX em ${gravacoes.length} gravaç${gravacoes.length>1?'ões':'ão'} (última ${ultimaGravacao.toLocaleDateString('pt-PT')} ${ultimaGravacao.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})})</span>`
+      : '';
+    const editadoInfo = nEditadas>0 ? ` · <span style="color:#8A5A12;">${nEditadas} loja${nEditadas>1?'s':''} com CX editado manualmente</span>` : '';
+    const temLimiteDiaAtivo = diaParaCalculo && (STATE.params.maxCxDiaDistribuicaoCD !== null && STATE.params.maxCxDiaDistribuicaoCD !== undefined && STATE.params.maxCxDiaDistribuicaoCD !== '');
+
+    return `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">${cd}${diaParaCalculo ? ` <span class="muted" style="font-size:13px; font-weight:500;">— ${diaParaCalculo}</span>` : ''}</div>
+          <div class="panel-desc">${lojasCD.length} loja${lojasCD.length!==1?'s':''}${diaParaCalculo?' com entrega neste dia':''} · necessidade total ${jaEmCx ? `${fmtInt(toCaixas(necessidadeTotal))} CX` : `${fmt1(necessidadeTotal)} ${unid} (${fmtInt(toCaixas(necessidadeTotal))} CX)`}${temLimiteDiaAtivo ? ` · sugestão limitada a ${STATE.params.maxCxDiaDistribuicaoCD} CX/loja neste dia (⚠ indica lojas reduzidas por este limite)` : ''}${editadoInfo}${gravadoInfo}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+          ${daySelectorHtml}
+          ${modoChip}
+          <div class="param-control">
+            <input type="number" class="qtd-recebida-input" data-cd="${cd}" data-chave="${chaveQtd}" min="0" step="1"
+              placeholder="${fmtInt(toCaixas(necessidadeTotal))}"
+              value="${temQtdRecebida ? STATE.qtdRecebidaPorCD[chaveQtd] : ''}">
+            <span class="param-unit">CX recebidas${diaParaCalculo?' ('+diaParaCalculo+')':''}</span>
+          </div>
+          <button class="filter-btn btn-gravar-cd" data-cd="${cd}" ${semLojasNoDia?'disabled':''} style="background:var(--action); color:#fff; border-color:var(--action); font-weight:600;" title="Acumula a quantidade 'A Distribuir' de cada loja no stock da aba Forecast e Receção (com a data de hoje). Cada clique acumula uma nova gravação.">💾 Gravar</button>
+          ${gravacoes.length ? `<button class="filter-btn btn-limpar-gravacoes" data-cd="${cd}" style="color:var(--critical); border-color:var(--critical);" title="Remove todas as gravações deste CD do stock acumulado das lojas">↺ Limpar gravações</button>` : ''}
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        ${semLojasNoDia ? `<div class="empty-state">Nenhuma loja deste CD tem entrega prevista à ${diaParaCalculo}.</div>` : `
+        <div class="table-wrap" style="max-height:50vh;">
+          <table>
+            <thead><tr>
+              <th>Loja</th><th>Nome</th>${diaParaCalculo?'<th>Dias de Entrega</th>':''}<th class="num">Venda Méd./dia</th>
+              <th class="num">Necessidade (${unid})</th>${jaEmCx ? '<th class="num">CX a Distribuir ✎</th>' : '<th class="num">A Distribuir (' + unid + ')</th><th class="num">CX a Distribuir ✎</th>'}
+            </tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr style="background:var(--bg);">
+              <td colspan="${diaParaCalculo?5:4}" style="font-weight:700;">Total distribuído</td>
+              ${jaEmCx ? '' : `<td class="num" style="font-weight:700;">${fmt1(totalDistribuido)}</td>`}
+              <td class="num" style="font-weight:700;">${fmtInt(totalDistribuidoCx)}</td>
+            </tr></tfoot>
+          </table>
+        </div>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="eyebrow">Pós-receção</div>
+    <h1 class="page-title">Distribuição por Centro de Distribuição</h1>
+    <p class="page-sub">Indica a quantidade total recebida em cada CD, em caixas (CX), para repartir pelas lojas. Se a quantidade for insuficiente, garante primeiro o stock mínimo de segurança a todas as lojas que estejam abaixo dele e distribui o restante proporcionalmente à venda média (quem vende mais, recebe mais).${temPlanning ? ' Selecione um dia da semana para distribuir apenas entre as lojas com entrega prevista nesse dia (segundo o Planning).' : ''} A coluna "CX a Distribuir" é editável (apague o valor para repor a sugestão). Ao clicar em <b>💾 Gravar</b>, a quantidade de cada loja é acumulada no stock da aba "Forecast e Receção", com a data de hoje — nos dias seguintes, a venda prevista é descontada automaticamente desse stock.</p>
+    <div style="margin:22px 0;">${blocks}</div>
+  `;
+}
+
+/* ============================================================
+   VIEW: PARÂMETROS
+   ============================================================ */
+function renderLogisticaEntregasPanel(){
+  const diasSelecionados = STATE.params.diasEntregaCD || [];
+  const dayBtns = DOW_SEMANA.map(d => `
+    <button class="unit-btn day-cd-btn ${diasSelecionados.includes(d)?'active':''}" data-day="${d}" style="padding:8px 12px; font-size:12.5px;">${d}</button>
+  `).join('');
+  return `
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Logística de Entregas</div></div>
+      <div class="panel-body">
+        <div class="param-grid">
+          <div class="param-row">
+            <div>
+              <div class="param-label">Dias em que o CD recebe do fornecedor</div>
+              <div class="param-note">A distribuição às lojas ocorre no dia seguinte (D+1) a cada um destes dias. Informativo — o calendário semanal por loja (aba "Forecast e Stock") usa os dias de entrega de cada loja definidos no Planning, independentemente desta seleção.</div>
+            </div>
+            <div class="param-control" style="flex-wrap:wrap; max-width:380px; justify-content:flex-end;">
+              <div class="unit-toggle" style="flex-wrap:wrap;">${dayBtns}</div>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Máximo de caixas a sugerir por dia</div>
+              <div class="param-note">Limite manual aplicado a cada célula do Calendário Semanal de Entrega por Loja (e à respetiva exportação em Excel). Se a necessidade real de um dia exceder este valor, a sugestão fica limitada a ele e a célula mostra um aviso (⚠). Deixe em branco para não aplicar nenhum limite.</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-maxcxcalendario" min="0" step="1" placeholder="Sem limite" value="${STATE.params.maxCxDiaCalendario === null || STATE.params.maxCxDiaCalendario === undefined ? '' : STATE.params.maxCxDiaCalendario}">
+              <span class="param-unit">CX/dia</span>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Excedente máximo sobre a venda média semanal</div>
+              <div class="param-note">Limite adicional aplicado ao Total da semana de cada loja no Calendário Semanal de Entrega por Loja: o total sugerido (coluna "Total") nunca pode superar a "Venda Méd. Semanal" mais esta quantidade. Exemplo: venda média semanal de 20 CX e excedente de 2 CX → no máximo 22 CX sugeridos na semana. Quando o total bruto ultrapassa esse teto, o excesso é descontado a partir do último dia de entrega da semana. Deixe em branco para não aplicar nenhum limite.</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-maxexcedentevenda" min="0" step="1" placeholder="Sem limite" value="${STATE.params.maxExcedenteVendaSemanal === null || STATE.params.maxExcedenteVendaSemanal === undefined ? '' : STATE.params.maxExcedenteVendaSemanal}">
+              <span class="param-unit">CX além da venda méd. semanal</span>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Máximo de caixas por dia na Distribuição por CD</div>
+              <div class="param-note">Limite manual aplicado, por loja, na aba "Distribuição por CD" quando um dia específico da semana está selecionado no filtro de cada CD. A quantidade "A Distribuir" dessa loja nesse dia fica limitada a este valor, e a célula mostra um aviso (⚠) quando o necessário era maior. Não tem efeito quando o filtro está em "Todos os dias" (esse modo mostra o total do período, não de um único dia). Deixe em branco para não aplicar nenhum limite.</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-maxcxdiadistribuicaocd" min="0" step="1" placeholder="Sem limite" value="${STATE.params.maxCxDiaDistribuicaoCD === null || STATE.params.maxCxDiaDistribuicaoCD === undefined ? '' : STATE.params.maxCxDiaDistribuicaoCD}">
+              <span class="param-unit">CX/dia/loja</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderParametros(){
+  const p = STATE.params;
+  const seasonalRows = STATE.seasonalIdx.map((v,i)=>`
+    <tr>
+      <td>${['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][i]}</td>
+      <td class="num">${v.toFixed(2)}</td>
+      <td>
+        <div style="background:var(--line-soft); border-radius:4px; height:8px; width:160px; overflow:hidden;">
+          <div style="background:${v>=1?'var(--action)':'var(--warn)'}; height:100%; width:${Math.min(100,v*50)}%;"></div>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  return `
+    <div class="eyebrow">Configuração</div>
+    <h1 class="page-title">Parâmetros de Cálculo</h1>
+    <p class="page-sub">Ajusta os parâmetros globais do modelo. Todas as áreas do dashboard recalculam automaticamente.</p>
+
+    <div class="toolbar" style="margin:18px 0 0;">
+      <button class="filter-btn" id="btn-reset-params" style="color:var(--critical); border-color:var(--critical);" title="Repõe todos os parâmetros desta página nos valores padrão (não afeta ficheiros carregados, distribuições gravadas nem edições por loja)">↺ Repor parâmetros padrão</button>
+    </div>
+
+    <div class="panel" style="margin-top:24px;">
+      <div class="panel-head"><div class="panel-title">Produto e Unidade</div></div>
+      <div class="panel-body">
+        <div class="param-grid">
+          <div class="param-row">
+            <div>
+              <div class="param-label">Unidade de medida do produto</div>
+              <div class="param-note">Define como os valores são apresentados em todo o dashboard (Receção Diária, Forecast, Resumo).</div>
+            </div>
+            <div class="param-control">
+              <div class="unit-toggle">
+                <button class="unit-btn ${p.unidadeMedida==='UN'?'active':''}" data-unit="UN">Unidade (UN)</button>
+                <button class="unit-btn ${p.unidadeMedida==='KG'?'active':''}" data-unit="KG">Quilograma (KG)</button>
+                <button class="unit-btn ${p.unidadeMedida==='CX'?'active':''}" data-unit="CX">Caixa (CX)</button>
+              </div>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Quantidade por caixa (CX)</div>
+              <div class="param-note">Quantas ${p.unidadeMedida === 'KG' ? 'kg' : (p.unidadeMedida === 'CX' ? 'caixas' : 'unidades')} tem cada caixa fechada. Usado para sugerir a quantidade de caixas a encomendar/receber, arredondada sempre para cima. ${p.unidadeMedida === 'CX' ? 'Com a unidade definida como Caixa (CX), o valor habitual é 1 (sem conversão); altere apenas se quiser converter a partir de outra base.' : ''}</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-qtdcaixa" min="0.1" step="0.1" value="${p.qtdPorCaixa}">
+              <span class="param-unit">${unidLabel()}/CX</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${STATE.diasEntregaLoja ? renderLogisticaEntregasPanel() : ''}
+
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">Parâmetros Globais</div></div>
+      <div class="panel-body">
+        <div class="param-grid">
+          <div class="param-row">
+            <div>
+              <div class="param-label">Cobertura de stock alvo (dias)</div>
+              <div class="param-note">Padrão para todas as lojas. Pode ser sobreposto individualmente na aba "Forecast e Receção".</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-cobertura" min="1" max="30" value="${p.coberturaAlvoGlobal}">
+              <span class="param-unit">dias</span>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Horizonte de forecast</div>
+              <div class="param-note">Número de dias futuros considerados na aba "Receção Diária" e nos totais de forecast.</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-horizonte" min="1" max="14" value="${p.horizonte}">
+              <span class="param-unit">dias</span>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Dias de histórico usados na tendência</div>
+              <div class="param-note">Por padrão usa todo o histórico carregado (${STATE.dateList.length} dias). Reduza para dar mais peso aos dados recentes.</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-ndias" min="3" max="${STATE.dateList.length}" value="${p.nDiasTendencia}">
+              <span class="param-unit">dias</span>
+            </div>
+          </div>
+          <div class="param-row">
+            <div>
+              <div class="param-label">Stock mínimo de segurança</div>
+              <div class="param-note">Buffer extra somado ao stock necessário antes de calcular a quantidade a receber. Para lojas sem histórico de vendas, ou cujo stock atual esteja abaixo deste mínimo, esta quantidade é garantida integralmente. Inserido em caixas (CX)${unidLabel()==='CX' ? '.' : ` — convertido automaticamente para ${unidLabel()} nos cálculos.`}</div>
+            </div>
+            <div class="param-control">
+              <input type="number" id="param-stockmin" min="0" max="1000" step="0.1" value="${Math.round((p.stockMinSeg / (p.qtdPorCaixa || 1))*10)/10}">
+              <span class="param-unit">CX</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Índice de Sazonalidade por Dia da Semana</div>
+          <div class="panel-desc">Calculado automaticamente com base no total de vendas de toda a rede. 1,00 = média; acima é mais forte, abaixo é mais fraco.</div>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Dia da Semana</th><th class="num">Índice</th><th>Visual</th></tr></thead>
+            <tbody>${seasonalRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   EVENT BINDING per view
+   ============================================================ */
+function recalcAndRender(){
+  STATE.results = computeAll();
+  render();
+}
+
+/* ============================================================
+   EXPORT: Excel e PDF (Receção Diária)
+   ============================================================ */
+function exportRecepcaoExcel(){
+  const horizonte = STATE.params.horizonte;
+  const lastDate = STATE.dateList[STATE.dateList.length-1];
+  const futureDates = [];
+  for(let t=1;t<=horizonte;t++) futureDates.push(addDays(lastDate,t));
+  const unid = unidLabel();
+  const jaEmCx = unid === 'CX';
+  const temCd = !!STATE.cdMap;
+
+  let rows = STATE.results.slice();
+  if (STATE.search){
+    const q = STATE.search.toLowerCase();
+    rows = rows.filter(x => x.loja.toLowerCase().includes(q) || x.nome.toLowerCase().includes(q));
+  }
+  if (temCd && STATE.cdFilter !== 'all'){
+    rows = rows.filter(x => x.cd === STATE.cdFilter);
+  }
+  rows.sort((a,b)=> b.qtdReceberHoje - a.qtdReceberHoje);
+
+  const dateLabels = futureDates.map(d=>d.toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'})+' (CX)');
+  const header = ['Cód. Loja','Nome Loja', ...(temCd?['CD']:[]), ...dateLabels, `Total a Receber (${unid})`, ...(jaEmCx?[]:['Total CX'])];
+  const dataRows = rows.map(x => {
+    const serieDiaria = x.distribuicaoDiariaPlanning || x.distribuicaoDiaria;
+    return [
+      x.loja, x.nome, ...(temCd?[x.cd||'']:[]),
+      ...serieDiaria.map(v => v===null ? 'S/E' : toCaixas(v)),
+      Math.round(x.qtdReceberHoje*10)/10, ...(jaEmCx?[]:[toCaixas(x.qtdReceberHoje)])
+    ];
+  });
+  const totalRow = ['', 'TOTAL REDE', ...(temCd?['']:[]),
+    ...(()=>{
+      const t=new Array(horizonte).fill(0);
+      rows.forEach(x=>{
+        const serieDiaria = x.distribuicaoDiariaPlanning || x.distribuicaoDiaria;
+        serieDiaria.forEach((v,i)=>{ if (v!==null) t[i]+=toCaixas(v); });
+      });
+      return t;
+    })(),
+    Math.round(rows.reduce((s,x)=>s+x.qtdReceberHoje,0)*10)/10,
+    ...(jaEmCx?[]:[rows.reduce((s,x)=>s+toCaixas(x.qtdReceberHoje),0)])
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows, totalRow]);
+  ws['!cols'] = [{wch:11},{wch:26}, ...(temCd?[{wch:10}]:[]), ...futureDates.map(()=>({wch:11})), {wch:16}, ...(jaEmCx?[]:[{wch:9}])];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Receção Diária');
+
+  const dataStr = lastDate.toLocaleDateString('pt-PT').replace(/\//g,'-');
+  XLSX.writeFile(wb, `Recepcao_Diaria_${dataStr}.xlsx`);
+}
+
+function exportRecepcaoPDF(){
+  document.body.classList.add('printing-recepcao');
+  window.print();
+  setTimeout(()=> document.body.classList.remove('printing-recepcao'), 500);
+}
+
+function exportForecastExcel(){
+  const unid = unidLabel();
+  const jaEmCx = unid === 'CX';
+  const temCd = !!STATE.cdMap;
+  let rows = STATE.results.slice();
+  if (STATE.search){
+    const q = STATE.search.toLowerCase();
+    rows = rows.filter(x => x.loja.toLowerCase().includes(q) || x.nome.toLowerCase().includes(q));
+  }
+  if (STATE.statusFilter !== 'all'){
+    rows = rows.filter(x => x.status === STATE.statusFilter);
+  }
+  if (temCd && STATE.cdFilter !== 'all'){
+    rows = rows.filter(x => x.cd === STATE.cdFilter);
+  }
+  rows.sort((a,b)=>{
+    const order = {critico:0, abaixo:1, sem_historico:2, ok:3};
+    return order[a.status]-order[b.status] || b.qtdReceberHoje-a.qtdReceberHoje;
+  });
+
+  const header = ['Cód. Loja','Nome Loja', ...(temCd?['CD']:[]), 'Stock (CX)', 'Venda Méd./dia',
+    'Cobertura Alvo (dias)', 'Tendência', 'Forecast D+1', 'Cobertura Atual (dias)', 'Status',
+    `Forecast ${STATE.params.horizonte}d`, 'Stock Necessário', `A Receber Hoje (${unid})`, ...(jaEmCx?[]:['CX a Receber']), 'Alerta'];
+
+  const dataRows = rows.map(x => [
+    x.loja, x.nome, ...(temCd?[x.cd||'']:[]),
+    Math.round((x.stockAtual/(STATE.params.qtdPorCaixa||1))*10)/10, Math.round(x.mediaReal*10)/10,
+    x.coberturaAlvo, Math.round(x.slope*100)/100, Math.round(x.forecastDia1*10)/10,
+    x.coberturaAtual!==null?Math.round(x.coberturaAtual*10)/10:'', STATUS_LABEL[x.status].txt,
+    Math.round(x.forecastHorizonte*10)/10, Math.round(x.stockNecessario*10)/10,
+    Math.round(x.qtdReceberHoje*10)/10, ...(jaEmCx?[]:[toCaixas(x.qtdReceberHoje)]),
+    x.semHistorico ? 'Sem histórico de vendas' : (x.stockNegativo && !x.stockEditado ? 'Stock negativo no SAP' : '')
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+  ws['!cols'] = [{wch:11},{wch:26}, ...(temCd?[{wch:10}]:[]), {wch:10},{wch:13},{wch:13},{wch:10},{wch:12},{wch:14},{wch:14},{wch:11},{wch:14},{wch:16},...(jaEmCx?[]:[{wch:11}]),{wch:28}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Forecast e Receção');
+
+  // Calendário Semanal de Entrega por Loja — só existe quando há Planning de Entrega carregado.
+  const wsCalendario = buildCalendarioSemanalSheet(rows, temCd);
+  if (wsCalendario) XLSX.utils.book_append_sheet(wb, wsCalendario, 'Calendário Semanal');
+
+  // Uma sheet por CD com a lista de lojas e o total de caixas sugeridas por dia da semana.
+  if (wsCalendario){
+    buildSheetsPorCD(rows).forEach(({nome, ws}) => XLSX.utils.book_append_sheet(wb, ws, nome));
+  }
+
+  const dataStr = STATE.dateList[STATE.dateList.length-1].toLocaleDateString('pt-PT').replace(/\//g,'-');
+  XLSX.writeFile(wb, `Forecast_Receção_${dataStr}.xlsx`);
+}
+
+function buildCalendarioSemanalSheet(rows, temCd){
+  const lojasComCalendario = rows.filter(x => x.calendarioSemanal);
+  if (lojasComCalendario.length === 0) return null;
+
+  const unid = unidLabel();
+  const qpc = STATE.params.qtdPorCaixa || 1;
+  const header = ['CD','Loja','Venda Méd./dia (CX)','Venda Méd. Semanal (CX)', ...DOW_SEMANA, 'Total Semana'];
+  const aoa = [header];
+  const merges = [];
+
+  lojasComCalendario.forEach(x => {
+    const calc = computeCalendarioSemanalCx(x);
+    const vendaMediaSemanal = x.mediaReal * 7;
+    const rowCx = [x.cd||'', x.loja, toCaixas(x.mediaReal), toCaixas(vendaMediaSemanal)];
+    const rowKg = ['', '', '', ''];
+    DOW_SEMANA.forEach((d, idx) => {
+      const info = x.calendarioSemanal[idx];
+      if (!info){
+        rowCx.push('');
+        rowKg.push('');
+      } else {
+        const cx = calc.porIdx[idx].cxFinal;
+        rowCx.push(cx);
+        rowKg.push(Math.round(cx*qpc*10)/10);
+      }
+    });
+    rowCx.push(calc.total);
+    rowKg.push(Math.round(calc.total*qpc*10)/10);
+
+    const startRow = aoa.length; // 0-based index dentro do aoa, antes de adicionar
+    aoa.push(rowCx, rowKg);
+    // mescla as colunas CD (A), Loja (B), Venda Méd./dia (C) e Venda Méd. Semanal (D) verticalmente
+    // pelas 2 linhas desta loja — são valores fixos por loja, iguais nas linhas de CX e de KG.
+    merges.push({ s:{r:startRow, c:0}, e:{r:startRow+1, c:0} });
+    merges.push({ s:{r:startRow, c:1}, e:{r:startRow+1, c:1} });
+    merges.push({ s:{r:startRow, c:2}, e:{r:startRow+1, c:2} });
+    merges.push({ s:{r:startRow, c:3}, e:{r:startRow+1, c:3} });
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = merges;
+  ws['!cols'] = [{wch:11},{wch:9},{wch:16},{wch:18}, ...DOW_SEMANA.map(()=>({wch:9})), {wch:13}];
+  return ws;
+}
+
+// Gera uma sheet por CD: lista as lojas desse CD com as caixas sugeridas em cada dia da semana
+// (já com os limites diário e semanal aplicados) e, no fim, uma linha "TOTAL CD" com a soma de
+// todas as lojas em cada dia — a mesma agregação usada na view "Total por CD" do dashboard.
+// Devolve [{ nome, ws }], um item por CD (nome da sheet limitado a 31 caracteres, único no livro).
+function buildSheetsPorCD(rows){
+  const lojasComCalendario = rows.filter(x => x.calendarioSemanal);
+  if (lojasComCalendario.length === 0) return [];
+  const qpc = STATE.params.qtdPorCaixa || 1;
+  const agregados = computeTotalCxPorCDEDia(rows);
+  const usedNames = new Set();
+  const sheets = [];
+  agregados.forEach(agr => {
+    const lojasDoCD = lojasComCalendario.filter(x => (x.cd || '— Sem CD —') === agr.cd);
+    const header = ['CD','Loja','Venda Méd./dia (CX)','Venda Méd. Semanal (CX)', ...DOW_SEMANA, 'Total Semana'];
+    const aoa = [header];
+    const merges = [];
+    lojasDoCD.forEach(x => {
+      const calc = computeCalendarioSemanalCx(x);
+      const vendaMediaSemanal = x.mediaReal * 7;
+      const rowCx = [x.cd||'', x.loja, toCaixas(x.mediaReal), toCaixas(vendaMediaSemanal)];
+      const rowKg = ['', '', '', ''];
+      DOW_SEMANA.forEach((d, idx) => {
+        if (!x.calendarioSemanal[idx]){
+          rowCx.push('');
+          rowKg.push('');
+        } else {
+          const cx = calc.porIdx[idx].cxFinal;
+          rowCx.push(cx);
+          rowKg.push(Math.round(cx*qpc*10)/10);
+        }
+      });
+      rowCx.push(calc.total);
+      rowKg.push(Math.round(calc.total*qpc*10)/10);
+      const startRow = aoa.length;
+      aoa.push(rowCx, rowKg);
+      merges.push({ s:{r:startRow, c:0}, e:{r:startRow+1, c:0} });
+      merges.push({ s:{r:startRow, c:1}, e:{r:startRow+1, c:1} });
+      merges.push({ s:{r:startRow, c:2}, e:{r:startRow+1, c:2} });
+      merges.push({ s:{r:startRow, c:3}, e:{r:startRow+1, c:3} });
+    });
+    const totalPorDiaEntregaLoja = [0,0,0,0,0,0,0];
+    lojasDoCD.forEach(x => {
+      const calc = computeCalendarioSemanalCx(x);
+      DOW_SEMANA.forEach((d, idx) => {
+        if (x.calendarioSemanal[idx]) totalPorDiaEntregaLoja[idx] += calc.porIdx[idx].cxFinal;
+      });
+    });
+    const linhaTotalCx = ['', 'TOTAL CD', '', '', ...totalPorDiaEntregaLoja.map(v => Math.round(v)), Math.round(agr.total)];
+    const linhaTotalKg = ['', '', '', '', ...totalPorDiaEntregaLoja.map(v => Math.round(v*qpc*10)/10), Math.round(agr.total*qpc*10)/10];
+    const startRowTotal = aoa.length;
+    aoa.push(linhaTotalCx, linhaTotalKg);
+    merges.push({ s:{r:startRowTotal, c:0}, e:{r:startRowTotal+1, c:0} });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = merges;
+    ws['!cols'] = [{wch:11},{wch:9},{wch:16},{wch:18}, ...DOW_SEMANA.map(()=>({wch:9})), {wch:13}];
+    let nome = agr.cd.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0,28) || 'CD';
+    let nomeFinal = `CD ${nome}`.slice(0,31);
+    let suffix = 1;
+    while (usedNames.has(nomeFinal)){
+      nomeFinal = `CD ${nome}`.slice(0, 31-String(suffix).length-1) + ' ' + suffix;
+      suffix++;
+    }
+    usedNames.add(nomeFinal);
+    sheets.push({ nome: nomeFinal, ws });
+  });
+  return sheets;
+}
+
+function exportForecastPDF(){
+  document.body.classList.add('printing-forecast');
+  window.print();
+  setTimeout(()=> document.body.classList.remove('printing-forecast'), 500);
+}
+
+function bindViewEvents(){
+  // Resumo: botao "ver todas as lojas"
+  document.querySelectorAll('[data-goto]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ STATE.view = btn.dataset.goto; render(); });
+  });
+
+  // Exportacao (Recepcao Diaria)
+  const btnXlsx = document.getElementById('btn-export-xlsx');
+  if (btnXlsx) btnXlsx.addEventListener('click', exportRecepcaoExcel);
+  const btnPdf = document.getElementById('btn-export-pdf');
+  if (btnPdf) btnPdf.addEventListener('click', exportRecepcaoPDF);
+
+  // Exportacao (Forecast e Receção)
+  const btnFcXlsx = document.getElementById('btn-export-forecast-xlsx');
+  if (btnFcXlsx) btnFcXlsx.addEventListener('click', exportForecastExcel);
+  const btnFcPdf = document.getElementById('btn-export-forecast-pdf');
+  if (btnFcPdf) btnFcPdf.addEventListener('click', exportForecastPDF);
+
+  // Filtro por CD (Recepcao e Forecast)
+  const filterCdRecepcao = document.getElementById('filter-cd-recepcao');
+  if (filterCdRecepcao) filterCdRecepcao.addEventListener('change', (e)=>{ STATE.cdFilter = e.target.value; render(); });
+  const filterCdForecast = document.getElementById('filter-cd-forecast');
+  if (filterCdForecast) filterCdForecast.addEventListener('change', (e)=>{ STATE.cdFilter = e.target.value; render(); });
+
+  // Repor stock editado manualmente
+  const btnResetStock = document.getElementById('btn-reset-stock');
+  if (btnResetStock) btnResetStock.addEventListener('click', ()=>{ STATE.stockOverride = {}; recalcAndRender(); });
+
+  // Quantidade recebida por CD, lançada manualmente em caixas (CX) — chave pode ser "CD" ou "CD__Dia"
+  document.querySelectorAll('.qtd-recebida-input').forEach(inp=>{
+    inp.addEventListener('change', (e)=>{
+      const chave = e.target.dataset.chave || e.target.dataset.cd;
+      const val = e.target.value;
+      if (val === ''){ delete STATE.qtdRecebidaPorCD[chave]; }
+      else {
+        const num = parseFloat(val);
+        if (!isNaN(num) && num>=0) STATE.qtdRecebidaPorCD[chave] = num;
+      }
+      render();
+    });
+  });
+
+  // Seletor de dia da semana por CD (Distribuição por CD)
+  document.querySelectorAll('.day-cd-select').forEach(sel=>{
+    sel.addEventListener('change', (e)=>{
+      const cd = e.target.dataset.cd;
+      STATE.diaCDSelecionado[cd] = e.target.value;
+      render();
+    });
+  });
+
+  // Edição manual da coluna "CX a Distribuir" (Distribuição por CD) — chave = "CD" ou "CD__Dia".
+  // Apagar o valor repõe a sugestão calculada.
+  document.querySelectorAll('.dist-cx-input').forEach(inp=>{
+    inp.addEventListener('change', (e)=>{
+      const chave = e.target.dataset.chave;
+      const loja = e.target.dataset.loja;
+      const raw = e.target.value;
+      if (raw === ''){
+        if (STATE.distribuicaoEditada[chave]){
+          delete STATE.distribuicaoEditada[chave][loja];
+          if (Object.keys(STATE.distribuicaoEditada[chave]).length === 0) delete STATE.distribuicaoEditada[chave];
+        }
+      } else {
+        const v = parseFloat(raw);
+        if (isNaN(v) || v < 0) return;
+        if (!STATE.distribuicaoEditada[chave]) STATE.distribuicaoEditada[chave] = {};
+        STATE.distribuicaoEditada[chave][loja] = v;
+      }
+      render();
+    });
+  });
+
+  // Gravar distribuição de um CD (acumula no stock das lojas) e limpar gravações
+  document.querySelectorAll('.btn-gravar-cd').forEach(btn=>{
+    btn.addEventListener('click', ()=> gravarDistribuicaoCD(btn.dataset.cd));
+  });
+  document.querySelectorAll('.btn-limpar-gravacoes').forEach(btn=>{
+    btn.addEventListener('click', ()=> limparGravacoesCD(btn.dataset.cd));
+  });
+
+  // Busca (recepcao / forecast)
+  const searchRecepcao = document.getElementById('search-recepcao');
+  if (searchRecepcao){
+    searchRecepcao.addEventListener('input', (e)=>{
+      STATE.search = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const el = document.getElementById('search-recepcao');
+      if (el){ el.focus(); el.setSelectionRange(pos,pos); }
+    });
+  }
+  const searchForecast = document.getElementById('search-forecast');
+  if (searchForecast){
+    searchForecast.addEventListener('input', (e)=>{
+      STATE.search = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const el = document.getElementById('search-forecast');
+      if (el){ el.focus(); el.setSelectionRange(pos,pos); }
+    });
+  }
+
+  // Filtros de status (forecast)
+  document.querySelectorAll('[data-status]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ STATE.statusFilter = btn.dataset.status; render(); });
+  });
+
+  // Ordenação clicável das colunas da tabela "Forecast e Receção"
+  document.querySelectorAll('#forecast-table .sortable-th').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const field = th.dataset.sortField;
+      if (STATE.sortForecast.field === field){
+        STATE.sortForecast.dir = STATE.sortForecast.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        STATE.sortForecast.field = field;
+        STATE.sortForecast.dir = 'desc';
+      }
+      render();
+    });
+  });
+
+  // Cobertura alvo por loja (editavel inline na tabela forecast)
+  document.querySelectorAll('.cov-input').forEach(inp=>{
+    inp.addEventListener('change', (e)=>{
+      const loja = e.target.dataset.loja;
+      const val = parseFloat(e.target.value);
+      if (!isNaN(val) && val>0){
+        STATE.coberturaPorLoja[loja] = val;
+        recalcAndRender();
+      }
+    });
+  });
+
+  // Stock por loja (editavel inline na tabela forecast) — inserido em CAIXAS (CX) e convertido
+  // para a unidade base nos cálculos, tal como o Stock Mínimo de Segurança dos parâmetros.
+  document.querySelectorAll('.stock-input').forEach(inp=>{
+    inp.addEventListener('change', (e)=>{
+      const loja = e.target.dataset.loja;
+      const vCx = parseFloat(e.target.value);
+      if (!isNaN(vCx) && vCx>=0){
+        const qpc = STATE.params.qtdPorCaixa || 1;
+        STATE.stockOverride[loja] = vCx * qpc;
+        recalcAndRender();
+      }
+    });
+  });
+
+  // Botão "Repor parâmetros padrão" — repõe todos os parâmetros globais nos valores DEFAULT_PARAMS
+  const btnResetParams = document.getElementById('btn-reset-params');
+  if (btnResetParams) btnResetParams.addEventListener('click', ()=>{
+    STATE.params = { ...DEFAULT_PARAMS, diasEntregaCD: [...DEFAULT_PARAMS.diasEntregaCD] };
+    STATE.params.nDiasTendencia = STATE.dateList ? STATE.dateList.length : null;
+    recalcAndRender();
+  });
+
+  // Parametros globais
+  const pCobertura = document.getElementById('param-cobertura');
+  if (pCobertura) pCobertura.addEventListener('change', (e)=>{
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v) && v>0){ STATE.params.coberturaAlvoGlobal = v; recalcAndRender(); }
+  });
+  const pHorizonte = document.getElementById('param-horizonte');
+  if (pHorizonte) pHorizonte.addEventListener('change', (e)=>{
+    const v = parseInt(e.target.value);
+    if (!isNaN(v) && v>0 && v<=14){ STATE.params.horizonte = v; recalcAndRender(); }
+  });
+  const pNDias = document.getElementById('param-ndias');
+  if (pNDias) pNDias.addEventListener('change', (e)=>{
+    const v = parseInt(e.target.value);
+    if (!isNaN(v) && v>=3){ STATE.params.nDiasTendencia = v; recalcAndRender(); }
+  });
+  const pStockMin = document.getElementById('param-stockmin');
+  if (pStockMin) pStockMin.addEventListener('change', (e)=>{
+    const vCx = parseFloat(e.target.value);
+    if (!isNaN(vCx) && vCx>=0){
+      const qpc = STATE.params.qtdPorCaixa || 1;
+      STATE.params.stockMinSeg = vCx * qpc;
+      recalcAndRender();
+    }
+  });
+  document.querySelectorAll('.unit-btn[data-unit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      STATE.params.unidadeMedida = btn.dataset.unit;
+      recalcAndRender();
+    });
+  });
+  document.querySelectorAll('.day-cd-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const day = btn.dataset.day;
+      const atual = STATE.params.diasEntregaCD || [];
+      if (atual.includes(day)){
+        STATE.params.diasEntregaCD = atual.filter(d=>d!==day);
+      } else {
+        STATE.params.diasEntregaCD = [...atual, day];
+      }
+      recalcAndRender();
+    });
+  });
+  const pMaxCxCalendario = document.getElementById('param-maxcxcalendario');
+  if (pMaxCxCalendario) pMaxCxCalendario.addEventListener('change', (e)=>{
+    const raw = e.target.value;
+    if (raw === ''){
+      STATE.params.maxCxDiaCalendario = null;
+    } else {
+      const v = parseInt(raw);
+      if (!isNaN(v) && v>=0) STATE.params.maxCxDiaCalendario = v;
+      else return;
+    }
+    recalcAndRender();
+  });
+  const pMaxExcedenteVenda = document.getElementById('param-maxexcedentevenda');
+  if (pMaxExcedenteVenda) pMaxExcedenteVenda.addEventListener('change', (e)=>{
+    const raw = e.target.value;
+    if (raw === ''){
+      STATE.params.maxExcedenteVendaSemanal = null;
+    } else {
+      const v = parseInt(raw);
+      if (!isNaN(v) && v>=0) STATE.params.maxExcedenteVendaSemanal = v;
+      else return;
+    }
+    recalcAndRender();
+  });
+  const pMaxCxDiaDistribuicaoCD = document.getElementById('param-maxcxdiadistribuicaocd');
+  if (pMaxCxDiaDistribuicaoCD) pMaxCxDiaDistribuicaoCD.addEventListener('change', (e)=>{
+    const raw = e.target.value;
+    if (raw === ''){
+      STATE.params.maxCxDiaDistribuicaoCD = null;
+    } else {
+      const v = parseInt(raw);
+      if (!isNaN(v) && v>=0) STATE.params.maxCxDiaDistribuicaoCD = v;
+      else return;
+    }
+    recalcAndRender();
+  });
+  const pQtdCaixa = document.getElementById('param-qtdcaixa');
+  if (pQtdCaixa) pQtdCaixa.addEventListener('change', (e)=>{
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v) && v>0){ STATE.params.qtdPorCaixa = v; recalcAndRender(); }
+  });
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+render();
+</script>
+</body>
+</html>
