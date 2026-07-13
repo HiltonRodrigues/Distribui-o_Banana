@@ -478,32 +478,47 @@ function limparTodasGravacoes(){
 }
 
 /* ============================================================
-   SESSÃO GUARDADA (localStorage)
+   SESSÃO GUARDADA (localStorage + servidor)
    Ao entrar no dashboard, os dados carregados (vendas, planning,
-   lojas habilitadas e parâmetros) ficam guardados neste browser.
-   Na visita seguinte, a doca mostra um botão para ENTRAR SEM
-   CARREGAR FICHEIROS, usando os dados da última sessão — útil para
-   consultar o stock gravado ou fazer novas distribuições sem
-   voltar a exportar o Excel.
+   lojas habilitadas e parâmetros) ficam guardados neste browser E
+   são enviados ao servidor partilhado (/api/sessao). Na visita
+   seguinte — em QUALQUER computador — a doca mostra um botão para
+   ENTRAR SEM CARREGAR FICHEIROS, usando a sessão mais recente
+   (a local ou a partilhada, a que for mais nova).
    ============================================================ */
 const SESSAO_KEY = 'doca_sessao_v1';
-function persistSessao(){
-  try{
-    const rows = (STATE.vendasRows || []).map(r => [dateKey(r.date), r.loja, r.vendasUN]);
-    localStorage.setItem(SESSAO_KEY, JSON.stringify({
-      guardadaEm: new Date().toISOString(),
-      fileNameVendas: STATE.fileNames.vendas || null,
-      vendas: rows,
-      cdMap: STATE.cdMap || null,
-      cdMapSource: STATE.cdMapSource || null,
-      nomeLoja: STATE.nomeLoja || {},
-      diasEntregaLoja: STATE.diasEntregaLoja || null,
-      lojasHabilitadas: STATE.lojasHabilitadas ? [...STATE.lojasHabilitadas] : null,
-      params: STATE.params,
-    }));
-  }catch(e){ /* quota excedida ou storage indisponível — sessão não fica guardada */ }
+const API_SESSAO = '/api/sessao';
+let SESSAO_REMOTA = null;
+
+function construirSessao(){
+  const rows = (STATE.vendasRows || []).map(r => [dateKey(r.date), r.loja, r.vendasUN]);
+  return {
+    guardadaEm: new Date().toISOString(),
+    fileNameVendas: STATE.fileNames.vendas || null,
+    vendas: rows,
+    cdMap: STATE.cdMap || null,
+    cdMapSource: STATE.cdMapSource || null,
+    nomeLoja: STATE.nomeLoja || {},
+    diasEntregaLoja: STATE.diasEntregaLoja || null,
+    lojasHabilitadas: STATE.lojasHabilitadas ? [...STATE.lojasHabilitadas] : null,
+    params: STATE.params,
+  };
 }
-function sessaoGuardada(){
+function persistSessao(){
+  const payload = construirSessao();
+  try{
+    localStorage.setItem(SESSAO_KEY, JSON.stringify(payload));
+  }catch(e){ /* quota excedida ou storage indisponível */ }
+  // envia ao servidor para ficar disponível em qualquer computador
+  try{
+    fetch(API_SESSAO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(res => { if (res.ok) SESSAO_REMOTA = payload; }).catch(()=>{});
+  }catch(e){}
+}
+function sessaoLocal(){
   try{
     const raw = localStorage.getItem(SESSAO_KEY);
     if (!raw) return null;
@@ -511,6 +526,24 @@ function sessaoGuardada(){
     if (!s || !Array.isArray(s.vendas) || s.vendas.length === 0) return null;
     return s;
   }catch(e){ return null; }
+}
+// Devolve a sessão mais recente entre a local (deste browser) e a partilhada (servidor)
+function sessaoGuardada(){
+  const l = sessaoLocal();
+  const r = SESSAO_REMOTA;
+  if (l && r) return (String(r.guardadaEm||'') > String(l.guardadaEm||'')) ? r : l;
+  return l || r || null;
+}
+async function carregarSessaoDoServidor(){
+  try{
+    const res = await fetch(API_SESSAO, { cache: 'no-store' });
+    if (!res.ok) return;
+    const s = await res.json();
+    if (s && Array.isArray(s.vendas) && s.vendas.length > 0){
+      SESSAO_REMOTA = s;
+      if (!STATE.loaded) render(); // mostra o botão "Entrar sem carregar ficheiros"
+    }
+  }catch(e){ /* servidor indisponível — fica só a sessão local */ }
 }
 function entrarComSessaoGuardada(){
   const s = sessaoGuardada();
@@ -1252,7 +1285,7 @@ function renderDock(){
     <div class="dock-card">
       <div class="dock-mark"><span class="dot"></span><span>Doca de Receção</span></div>
       <h1 class="dock-title">Quanto vai <em>chegar</em><br>à porta de cada loja?</h1>
-      <p class="dock-desc">Carrega o histórico de vendas. O forecast, a cobertura e a quantidade diária a receber são calculados aqui mesmo, no browser — nada sai do teu computador. O stock de cada loja é construído a partir das distribuições gravadas na aba "Distribuição por CD".</p>
+      <p class="dock-desc">Carrega o histórico de vendas. O forecast, a cobertura e a quantidade diária a receber são calculados no browser. Os dados carregados e as distribuições gravadas ficam guardados no armazenamento do site, partilhados por todos os utilizadores — noutro computador basta "Entrar sem carregar ficheiros".</p>
 
       <div class="bays">
         <label class="${bayClass(vendasOk, vendasErr)}" id="bay-vendas">
@@ -1290,12 +1323,12 @@ function renderDock(){
         ${canEnter ? 'Calcular e abrir dashboard →' : 'Carrega o ficheiro de vendas para continuar'}
       </button>
 
-      ${(!canEnter && sessaoGuardada()) ? (()=>{ const s = sessaoGuardada(); const ult = s.vendas.length ? s.vendas.reduce((m,r)=> r[0]>m?r[0]:m, s.vendas[0][0]) : null; return `
+      ${(!canEnter && sessaoGuardada()) ? (()=>{ const s = sessaoGuardada(); const ult = s.vendas.length ? s.vendas.reduce((m,r)=> r[0]>m?r[0]:m, s.vendas[0][0]) : null; const partilhada = (s === SESSAO_REMOTA); return `
       <button class="dock-cta" id="btn-enter-sessao" style="margin-top:10px; background:#fff; color:var(--action-dark); border:1.5px solid var(--action);">
-        Entrar sem carregar ficheiros → <span style="font-weight:400; font-size:12px;">(dados da última sessão${ult ? ` · vendas até ${ult.split('-').reverse().join('/')}` : ''})</span>
+        Entrar sem carregar ficheiros → <span style="font-weight:400; font-size:12px;">(${partilhada ? 'sessão partilhada' : 'dados da última sessão'}${ult ? ` · vendas até ${ult.split('-').reverse().join('/')}` : ''})</span>
       </button>`; })() : ''}
 
-      <div class="dock-privacy">${ICONS.lock} Processamento 100% local — os ficheiros nunca são enviados para nenhum servidor.</div>
+      <div class="dock-privacy">${ICONS.lock} Cálculos feitos no browser · dados e gravações guardados no armazenamento privado do site (Netlify), acessíveis a quem tiver o link.</div>
 
       ${totalGravacoesGuardadas() > 0 ? `
       <div style="margin-top:14px; padding:12px 14px; background:var(--ok-soft); border:1px solid var(--ok); border-radius:8px; font-size:12.5px; color:var(--action-dark); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
@@ -2864,7 +2897,8 @@ function bindViewEvents(){
    ============================================================ */
 loadGravacoes();            // cache local — imediata
 render();
-carregarGravacoesDoServidor(); // estado partilhado — substitui quando disponível
+carregarGravacoesDoServidor(); // gravações partilhadas — substitui quando disponível
+carregarSessaoDoServidor();    // sessão partilhada — ativa "Entrar sem carregar ficheiros" em qualquer PC
 </script>
 </body>
 </html>
