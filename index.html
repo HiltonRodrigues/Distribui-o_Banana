@@ -392,6 +392,142 @@ const STATE = {
 };
 
 /* ============================================================
+   PERSISTÊNCIA DAS GRAVAÇÕES
+   1) SERVIDOR (partilhado): quando o site está alojado no Netlify
+      com a função /api/gravacoes, as gravações são guardadas num
+      estado único partilhado por TODOS os utilizadores — quem grava
+      num computador, os outros veem.
+   2) localStorage (local): cache/reserva neste browser, usada
+      imediatamente no arranque e quando o servidor não está
+      disponível (ex.: ficheiro aberto localmente).
+   ============================================================ */
+const STORAGE_KEY = 'doca_gravacoes_v1';
+const API_GRAVACOES = '/api/gravacoes';
+let SERVIDOR_GRAVACOES = null; // null = ainda não testado, true/false depois
+
+function persistGravacoes(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      stockGravado: STATE.stockGravado,
+      gravacoesPorCD: STATE.gravacoesPorCD,
+    }));
+  }catch(e){ /* sem persistência disponível — mantém só em memória */ }
+}
+function loadGravacoes(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === 'object'){
+      STATE.stockGravado = obj.stockGravado || {};
+      STATE.gravacoesPorCD = obj.gravacoesPorCD || {};
+    }
+  }catch(e){ /* dados corrompidos ou storage indisponível — ignora */ }
+}
+
+// Aplica o estado devolvido pelo servidor e re-renderiza
+function aplicarEstadoServidor(estado){
+  STATE.stockGravado = (estado && estado.stockGravado) || {};
+  STATE.gravacoesPorCD = (estado && estado.gravacoesPorCD) || {};
+  persistGravacoes();
+  if (STATE.loaded && STATE.results){ recalcAndRender(); } else { render(); }
+}
+
+// Vai buscar o estado partilhado ao servidor (no arranque e ao entrar no dashboard)
+async function carregarGravacoesDoServidor(){
+  try{
+    const res = await fetch(API_GRAVACOES, { cache: 'no-store' });
+    if (!res.ok) throw new Error('sem servidor');
+    const estado = await res.json();
+    SERVIDOR_GRAVACOES = true;
+    aplicarEstadoServidor(estado);
+  }catch(e){
+    if (SERVIDOR_GRAVACOES === null){ SERVIDOR_GRAVACOES = false; if (!STATE.loaded) render(); }
+  }
+}
+
+// Envia uma ação ao servidor (gravar / limpar). O servidor junta a ação ao estado
+// partilhado e devolve o estado atualizado — que substitui o local (já inclui a
+// nossa ação e as de outros utilizadores). Se falhar, fica só o registo local.
+async function sincronizarAcao(payload){
+  try{
+    const res = await fetch(API_GRAVACOES, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('falha no servidor');
+    const estado = await res.json();
+    SERVIDOR_GRAVACOES = true;
+    aplicarEstadoServidor(estado);
+  }catch(e){
+    SERVIDOR_GRAVACOES = false;
+    if (STATE.loaded && STATE.results){ render(); }
+  }
+}
+
+function totalGravacoesGuardadas(){
+  return Object.values(STATE.gravacoesPorCD).reduce((s,arr)=>s+arr.length,0);
+}
+function limparTodasGravacoes(){
+  STATE.stockGravado = {};
+  STATE.gravacoesPorCD = {};
+  persistGravacoes();
+  sincronizarAcao({ action: 'limpar_tudo' });
+  if (STATE.loaded){ recalcAndRender(); } else { render(); }
+}
+
+/* ============================================================
+   SESSÃO GUARDADA (localStorage)
+   Ao entrar no dashboard, os dados carregados (vendas, planning,
+   lojas habilitadas e parâmetros) ficam guardados neste browser.
+   Na visita seguinte, a doca mostra um botão para ENTRAR SEM
+   CARREGAR FICHEIROS, usando os dados da última sessão — útil para
+   consultar o stock gravado ou fazer novas distribuições sem
+   voltar a exportar o Excel.
+   ============================================================ */
+const SESSAO_KEY = 'doca_sessao_v1';
+function persistSessao(){
+  try{
+    const rows = (STATE.vendasRows || []).map(r => [dateKey(r.date), r.loja, r.vendasUN]);
+    localStorage.setItem(SESSAO_KEY, JSON.stringify({
+      guardadaEm: new Date().toISOString(),
+      fileNameVendas: STATE.fileNames.vendas || null,
+      vendas: rows,
+      cdMap: STATE.cdMap || null,
+      cdMapSource: STATE.cdMapSource || null,
+      nomeLoja: STATE.nomeLoja || {},
+      diasEntregaLoja: STATE.diasEntregaLoja || null,
+      lojasHabilitadas: STATE.lojasHabilitadas ? [...STATE.lojasHabilitadas] : null,
+      params: STATE.params,
+    }));
+  }catch(e){ /* quota excedida ou storage indisponível — sessão não fica guardada */ }
+}
+function sessaoGuardada(){
+  try{
+    const raw = localStorage.getItem(SESSAO_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || !Array.isArray(s.vendas) || s.vendas.length === 0) return null;
+    return s;
+  }catch(e){ return null; }
+}
+function entrarComSessaoGuardada(){
+  const s = sessaoGuardada();
+  if (!s) return;
+  STATE.vendasRows = s.vendas.map(([k, loja, v]) => ({ date: new Date(k + 'T00:00:00.000Z'), loja, vendasUN: Number(v) || 0 }));
+  STATE.fileNames.vendas = s.fileNameVendas || 'dados da última sessão';
+  STATE.fileErrors.vendas = null;
+  STATE.cdMap = s.cdMap || null;
+  STATE.cdMapSource = s.cdMapSource || null;
+  STATE.nomeLoja = s.nomeLoja || {};
+  STATE.diasEntregaLoja = s.diasEntregaLoja || null;
+  STATE.lojasHabilitadas = s.lojasHabilitadas ? new Set(s.lojasHabilitadas) : null;
+  if (s.params) STATE.params = { ...STATE.params, ...s.params, diasEntregaCD: [...(s.params.diasEntregaCD || STATE.params.diasEntregaCD)] };
+  tryProcessAndEnter();
+}
+
+/* ============================================================
    CALC ENGINE — replicado e validado contra o modelo Excel
    ============================================================ */
 const DOW_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -837,10 +973,17 @@ function computeDistribuicaoDiariaComPlanning(forecast14, lastDate, diasEntregaL
    quantidades gravadas e desconta a venda prevista dos dias
    SEGUINTES a cada gravação, até ao dia de hoje (nunca abaixo de 0).
    ============================================================ */
-// Venda prevista para uma data concreta: usa o forecast da loja quando a data cai dentro da
-// janela de forecast (a partir do último dia de vendas carregado); fora dessa janela usa a
-// venda média diária como aproximação.
-function vendaPrevistaNoDia(d, lastDate, forecast, mediaReal){
+// Venda a descontar numa data concreta, por ordem de preferência:
+//  1) VENDA REAL — se a data existir no histórico de vendas carregado, usa a venda efetiva da
+//     loja nesse dia. É isto que permite carregar um ficheiro de vendas atualizado e abater o
+//     stock gravado com as vendas reais, sem recomeçar do zero.
+//  2) FORECAST — se a data for futura face ao histórico, usa o forecast diário da loja.
+//  3) MÉDIA — fora da janela de forecast, usa a venda média diária como aproximação.
+function vendaNoDia(loja, d, lastDate, forecast, mediaReal){
+  const k = dateKey(d);
+  if (STATE.dateIdxMap && (k in STATE.dateIdxMap) && STATE.pivot && STATE.pivot[loja]){
+    return Math.max(0, STATE.pivot[loja][STATE.dateIdxMap[k]]);
+  }
   const t = Math.round((d.getTime() - lastDate.getTime()) / 86400000);
   if (t >= 1 && t <= forecast.length) return forecast[t-1];
   return Math.max(0, mediaReal);
@@ -862,7 +1005,7 @@ function stockGravadoEfetivo(loja, lastDate, forecast, mediaReal){
     // desconta a venda prevista dos dias SEGUINTES à primeira gravação (o dia da própria
     // gravação não é descontado — só os dias que se seguem)
     if (!ehPrimeiroDia){
-      stock = Math.max(0, stock - vendaPrevistaNoDia(d, lastDate, forecast, mediaReal));
+      stock = Math.max(0, stock - vendaNoDia(loja, d, lastDate, forecast, mediaReal));
     }
     const k = dateKey(d);
     if (porDia[k]) stock += porDia[k];
@@ -875,6 +1018,10 @@ function stockGravadoEfetivo(loja, lastDate, forecast, mediaReal){
 function computeAll(){
   const { pivot, dateList, lojas } = buildPivot(STATE.vendasRows);
   STATE.pivot = pivot; STATE.dateList = dateList; STATE.lojas = lojas;
+  // mapa data->índice para consultar rapidamente a venda REAL de um dia no histórico carregado
+  const dateIdxMap = {};
+  dateList.forEach((d,i)=>{ dateIdxMap[dateKey(d)] = i; });
+  STATE.dateIdxMap = dateIdxMap;
   STATE.seasonalIdx = computeSeasonalIndex(pivot, dateList, lojas);
   if (STATE.params.nDiasTendencia === null) STATE.params.nDiasTendencia = dateList.length;
 
@@ -1042,7 +1189,9 @@ function tryProcessAndEnter(){
   if (!STATE.vendasRows) return;
   STATE.results = computeAll();
   STATE.loaded = true;
+  persistSessao();               // guarda os dados para poder entrar sem ficheiros na próxima visita
   render();
+  carregarGravacoesDoServidor(); // garante que entra com as gravações mais recentes de todos
 }
 
 /* ============================================================
@@ -1141,7 +1290,18 @@ function renderDock(){
         ${canEnter ? 'Calcular e abrir dashboard →' : 'Carrega o ficheiro de vendas para continuar'}
       </button>
 
+      ${(!canEnter && sessaoGuardada()) ? (()=>{ const s = sessaoGuardada(); const ult = s.vendas.length ? s.vendas.reduce((m,r)=> r[0]>m?r[0]:m, s.vendas[0][0]) : null; return `
+      <button class="dock-cta" id="btn-enter-sessao" style="margin-top:10px; background:#fff; color:var(--action-dark); border:1.5px solid var(--action);">
+        Entrar sem carregar ficheiros → <span style="font-weight:400; font-size:12px;">(dados da última sessão${ult ? ` · vendas até ${ult.split('-').reverse().join('/')}` : ''})</span>
+      </button>`; })() : ''}
+
       <div class="dock-privacy">${ICONS.lock} Processamento 100% local — os ficheiros nunca são enviados para nenhum servidor.</div>
+
+      ${totalGravacoesGuardadas() > 0 ? `
+      <div style="margin-top:14px; padding:12px 14px; background:var(--ok-soft); border:1px solid var(--ok); border-radius:8px; font-size:12.5px; color:var(--action-dark); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <span>💾 <b>${totalGravacoesGuardadas()} gravaç${totalGravacoesGuardadas()>1?'ões':'ão'} de distribuição guardada${totalGravacoesGuardadas()>1?'s':''}</b>${SERVIDOR_GRAVACOES===true?' (partilhadas online com todos os utilizadores)':' de sessões anteriores'} — o stock acumulado será mantido e abatido com as vendas do ficheiro que carregares.</span>
+        <button id="btn-limpar-tudo-dock" style="border:1px solid var(--critical); color:var(--critical); background:#fff; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer; font-family:var(--font-body);">↺ Começar do zero</button>
+      </div>` : ''}
 
       <div class="dock-cols">
         <div><b>Colunas necessárias no Excel de vendas:</b> Date · Loja · Vendas UN</div>
@@ -1161,6 +1321,10 @@ function bindDockEvents(){
   if (hInput) hInput.addEventListener('change', (e)=> handleFileSelect('lojasHabilitadas', e.target.files[0]));
   const btn = document.getElementById('btn-enter');
   if (btn) btn.addEventListener('click', tryProcessAndEnter);
+  const btnSessao = document.getElementById('btn-enter-sessao');
+  if (btnSessao) btnSessao.addEventListener('click', entrarComSessaoGuardada);
+  const btnLimparTudo = document.getElementById('btn-limpar-tudo-dock');
+  if (btnLimparTudo) btnLimparTudo.addEventListener('click', limparTodasGravacoes);
 }
 
 /* ============================================================
@@ -1193,6 +1357,7 @@ function renderApp(){
       <div class="nav-divider"></div>
       <div class="sidebar-footer">
         <div class="meta">Vendas até<br><strong style="color:#F2EFE6">${dataRefStr}</strong></div>
+        <div class="meta" style="margin-top:8px;">${SERVIDOR_GRAVACOES===true ? '☁ Gravações partilhadas online' : '💾 Gravações só neste browser'}</div>
         <button id="btn-reset">Carregar outros ficheiros</button>
       </div>
     </aside>
@@ -1219,7 +1384,11 @@ function bindAppEvents(){
     STATE.cdMap = null; STATE.fileNamePlanning = null; STATE.fileErrorPlanning = null; STATE.cdMapSource = null;
     STATE.nomeLoja = {};
     STATE.lojasHabilitadas = null; STATE.fileNameLojasHabilitadas = null; STATE.fileErrorLojasHabilitadas = null;
-    STATE.stockGravado = {}; STATE.gravacoesPorCD = {}; STATE.distribuicaoEditada = {};
+    // NOTA: as gravações (stockGravado / gravacoesPorCD) são MANTIDAS de propósito — carregar um
+    // novo ficheiro de vendas serve precisamente para abater o stock gravado com as vendas reais,
+    // sem recomeçar do zero. Para as apagar, use "Limpar gravações" na Distribuição por CD ou o
+    // botão na doca inicial.
+    STATE.distribuicaoEditada = {};
     STATE.qtdRecebidaPorCD = {}; STATE.stockOverride = {}; STATE.coberturaPorLoja = {};
     render();
   });
@@ -1546,7 +1715,7 @@ function renderForecast(){
   return `
     <div class="eyebrow">Detalhe por loja</div>
     <h1 class="page-title">Forecast e Receção</h1>
-    <p class="page-sub">O stock de cada loja é o acumulado das distribuições <b>gravadas</b> na aba "Distribuição por CD", descontando a venda prevista dos dias seguintes a cada gravação. Cobertura alvo e stock continuam editáveis por loja (clique na célula). O status reflete a proporção em falta face ao necessário, não a cobertura atual.</p>
+    <p class="page-sub">O stock de cada loja é o acumulado das distribuições <b>gravadas</b> na aba "Distribuição por CD", abatido dia a dia: usa a <b>venda real</b> quando o histórico carregado cobre esses dias, e a venda prevista nos restantes. As gravações ficam guardadas no browser — podes carregar um ficheiro de vendas atualizado sem recomeçar do zero. Cobertura alvo e stock continuam editáveis por loja (clique na célula).</p>
 
     <div class="toolbar" style="margin:22px 0 16px; justify-content:space-between;">
       <div class="toolbar">
@@ -1890,15 +2059,22 @@ function gravarDistribuicaoCD(cd){
   const final = aplicarEdicoesDistribuicao(distribuicao, chave);
   const hoje = dateKey(new Date());
   let totalCx = 0;
+  const novasEntradas = [];
   final.forEach(d => {
     if (!d.qtdFinal || d.qtdFinal <= 0) return;
     if (!STATE.stockGravado[d.loja.loja]) STATE.stockGravado[d.loja.loja] = [];
     STATE.stockGravado[d.loja.loja].push({ qtd: d.qtdFinal, data: hoje, cd });
+    novasEntradas.push({ loja: d.loja.loja, qtd: d.qtdFinal, data: hoje, cd });
     totalCx += d.cxFinal;
   });
+  const gravacao = { cd, data: new Date().toISOString(), totalCx, dia: diaParaCalculo || 'Todos os dias' };
   if (!STATE.gravacoesPorCD[cd]) STATE.gravacoesPorCD[cd] = [];
-  STATE.gravacoesPorCD[cd].push({ data: new Date().toISOString(), totalCx, dia: diaParaCalculo || 'Todos os dias' });
+  STATE.gravacoesPorCD[cd].push({ data: gravacao.data, totalCx, dia: gravacao.dia });
+  persistGravacoes();
   recalcAndRender();
+  // envia ao servidor partilhado (o servidor junta e devolve o estado completo,
+  // incluindo gravações feitas por outros utilizadores)
+  sincronizarAcao({ action: 'gravar', entradas: novasEntradas, gravacao });
 }
 
 // Remove todas as gravações de um CD (do log e do stock acumulado das lojas).
@@ -1908,6 +2084,8 @@ function limparGravacoesCD(cd){
     if (STATE.stockGravado[loja].length === 0) delete STATE.stockGravado[loja];
   });
   delete STATE.gravacoesPorCD[cd];
+  persistGravacoes();
+  sincronizarAcao({ action: 'limpar_cd', cd });
   recalcAndRender();
 }
 
@@ -2014,7 +2192,7 @@ function renderDistribuicaoCD(){
   return `
     <div class="eyebrow">Pós-receção</div>
     <h1 class="page-title">Distribuição por Centro de Distribuição</h1>
-    <p class="page-sub">Indica a quantidade total recebida em cada CD, em caixas (CX), para repartir pelas lojas. Se a quantidade for insuficiente, garante primeiro o stock mínimo de segurança a todas as lojas que estejam abaixo dele e distribui o restante proporcionalmente à venda média (quem vende mais, recebe mais).${temPlanning ? ' Selecione um dia da semana para distribuir apenas entre as lojas com entrega prevista nesse dia (segundo o Planning).' : ''} A coluna "CX a Distribuir" é editável (apague o valor para repor a sugestão). Ao clicar em <b>💾 Gravar</b>, a quantidade de cada loja é acumulada no stock da aba "Forecast e Receção", com a data de hoje — nos dias seguintes, a venda prevista é descontada automaticamente desse stock.</p>
+    <p class="page-sub">Indica a quantidade total recebida em cada CD, em caixas (CX), para repartir pelas lojas. Se a quantidade for insuficiente, garante primeiro o stock mínimo de segurança a todas as lojas que estejam abaixo dele e distribui o restante proporcionalmente à venda média (quem vende mais, recebe mais).${temPlanning ? ' Selecione um dia da semana para distribuir apenas entre as lojas com entrega prevista nesse dia (segundo o Planning).' : ''} A coluna "CX a Distribuir" é editável (apague o valor para repor a sugestão). Ao clicar em <b>💾 Gravar</b>, a quantidade de cada loja é acumulada no stock da aba "Forecast e Receção", com a data de hoje — nos dias seguintes é abatida a venda real (quando o histórico de vendas carregado cobre esses dias) ou a venda prevista. As gravações ficam guardadas no browser entre sessões.</p>
     <div style="margin:22px 0;">${blocks}</div>
   `;
 }
@@ -2684,7 +2862,9 @@ function bindViewEvents(){
 /* ============================================================
    INIT
    ============================================================ */
+loadGravacoes();            // cache local — imediata
 render();
+carregarGravacoesDoServidor(); // estado partilhado — substitui quando disponível
 </script>
 </body>
 </html>
