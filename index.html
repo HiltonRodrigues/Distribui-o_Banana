@@ -502,6 +502,7 @@ function construirSessao(){
     diasEntregaLoja: STATE.diasEntregaLoja || null,
     lojasHabilitadas: STATE.lojasHabilitadas ? [...STATE.lojasHabilitadas] : null,
     params: STATE.params,
+    coberturaPorLoja: STATE.coberturaPorLoja || {},
   };
 }
 function persistSessao(){
@@ -556,8 +557,95 @@ function entrarComSessaoGuardada(){
   STATE.nomeLoja = s.nomeLoja || {};
   STATE.diasEntregaLoja = s.diasEntregaLoja || null;
   STATE.lojasHabilitadas = s.lojasHabilitadas ? new Set(s.lojasHabilitadas) : null;
-  if (s.params) STATE.params = { ...STATE.params, ...s.params, diasEntregaCD: [...(s.params.diasEntregaCD || STATE.params.diasEntregaCD)] };
+  // Os parâmetros da sessão só são usados se ainda não existirem AJUSTES guardados —
+  // os ajustes (abaixo) são a fonte de verdade dos parâmetros e edições.
+  if (s.params && AJUSTES_ULTIMO_JSON === null) STATE.params = { ...STATE.params, ...s.params, diasEntregaCD: [...(s.params.diasEntregaCD || STATE.params.diasEntregaCD)] };
   tryProcessAndEnter();
+}
+
+/* ============================================================
+   AJUSTES PARTILHADOS (localStorage + servidor)
+   Tudo o que o utilizador configura no dashboard fica guardado
+   automaticamente a cada alteração e é partilhado com todos:
+   - Parâmetros de Cálculo (unidade, qtd/caixa, cobertura, dias,
+     limites, etc.)
+   - Cobertura alvo e Stock editados por loja (Forecast e Receção)
+   - "CX a Distribuir" editados, CX recebidas e dia selecionado
+     por CD (Distribuição por CD)
+   Ao abrir o site, aplica-se o mais recente entre o guardado
+   neste browser e o guardado no servidor.
+   ============================================================ */
+const AJUSTES_KEY = 'doca_ajustes_v1';
+const API_AJUSTES = '/api/ajustes';
+let AJUSTES_PRONTO = false;       // já tentámos carregar (evita gravar por cima antes de ler)
+let AJUSTES_ULTIMO_JSON = null;   // conteúdo do último ajuste guardado (evita envios repetidos)
+let AJUSTES_TIMER = null;
+
+function construirAjustes(){
+  return {
+    atualizadoEm: new Date().toISOString(),
+    params: STATE.params,
+    coberturaPorLoja: STATE.coberturaPorLoja || {},
+    stockOverride: STATE.stockOverride || {},
+    distribuicaoEditada: STATE.distribuicaoEditada || {},
+    qtdRecebidaPorCD: STATE.qtdRecebidaPorCD || {},
+    diaCDSelecionado: STATE.diaCDSelecionado || {},
+  };
+}
+function serializarConteudoAjustes(a){
+  return JSON.stringify([a.params, a.coberturaPorLoja, a.stockOverride, a.distribuicaoEditada, a.qtdRecebidaPorCD, a.diaCDSelecionado]);
+}
+function aplicarAjustes(a){
+  if (!a || typeof a !== 'object') return;
+  if (a.params) STATE.params = { ...STATE.params, ...a.params, diasEntregaCD: [...(a.params.diasEntregaCD || STATE.params.diasEntregaCD)] };
+  STATE.coberturaPorLoja = a.coberturaPorLoja || {};
+  STATE.stockOverride = a.stockOverride || {};
+  STATE.distribuicaoEditada = a.distribuicaoEditada || {};
+  STATE.qtdRecebidaPorCD = a.qtdRecebidaPorCD || {};
+  STATE.diaCDSelecionado = a.diaCDSelecionado || {};
+  AJUSTES_ULTIMO_JSON = serializarConteudoAjustes(a);
+}
+function ajustesLocais(){
+  try{
+    const raw = localStorage.getItem(AJUSTES_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+async function inicializarAjustes(){
+  const local = ajustesLocais();
+  let remoto = null;
+  try{
+    const res = await fetch(API_AJUSTES, { cache: 'no-store' });
+    if (res.ok) remoto = await res.json();
+  }catch(e){ /* servidor indisponível — usa só o local */ }
+  const escolhido = (local && remoto)
+    ? ((String(remoto.atualizadoEm||'') > String(local.atualizadoEm||'')) ? remoto : local)
+    : (remoto || local);
+  if (escolhido){
+    aplicarAjustes(escolhido);
+    if (STATE.loaded && STATE.results){ recalcAndRender(); } else { render(); }
+  }
+  AJUSTES_PRONTO = true;
+}
+// Chamado no fim de cada render(): se o conteúdo mudou, guarda localmente e
+// envia ao servidor (com um pequeno atraso para agrupar alterações seguidas).
+function agendarPersistAjustes(){
+  if (!AJUSTES_PRONTO) return; // não gravar por cima antes de termos lido o estado guardado
+  const a = construirAjustes();
+  const s = serializarConteudoAjustes(a);
+  if (s === AJUSTES_ULTIMO_JSON) return;
+  AJUSTES_ULTIMO_JSON = s;
+  try{ localStorage.setItem(AJUSTES_KEY, JSON.stringify(a)); }catch(e){}
+  if (AJUSTES_TIMER) clearTimeout(AJUSTES_TIMER);
+  AJUSTES_TIMER = setTimeout(()=>{
+    try{
+      fetch(API_AJUSTES, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(a),
+      }).catch(()=>{});
+    }catch(e){}
+  }, 600);
 }
 
 /* ============================================================
@@ -1262,10 +1350,12 @@ function render(){
   if (!STATE.loaded){
     root.innerHTML = renderDock();
     bindDockEvents();
+    agendarPersistAjustes();
     return;
   }
   root.innerHTML = renderApp();
   bindAppEvents();
+  agendarPersistAjustes();
 }
 
 function renderDock(){
@@ -2413,9 +2503,21 @@ function renderParametros(){
 /* ============================================================
    EVENT BINDING per view
    ============================================================ */
+// Guarda a sessão (parâmetros incluídos) de forma diferida: qualquer alteração de
+// parâmetros ou edição chama recalcAndRender, e 800ms depois a sessão atualizada é
+// gravada no browser e enviada ao servidor partilhado — assim os parâmetros definidos
+// ficam guardados para a próxima entrada, em qualquer computador.
+let _persistSessaoTimer = null;
+function persistSessaoDebounced(){
+  if (!STATE.loaded || !STATE.vendasRows) return;
+  clearTimeout(_persistSessaoTimer);
+  _persistSessaoTimer = setTimeout(persistSessao, 800);
+}
+
 function recalcAndRender(){
   STATE.results = computeAll();
   render();
+  persistSessaoDebounced();
 }
 
 /* ============================================================
@@ -2899,6 +3001,7 @@ loadGravacoes();            // cache local — imediata
 render();
 carregarGravacoesDoServidor(); // gravações partilhadas — substitui quando disponível
 carregarSessaoDoServidor();    // sessão partilhada — ativa "Entrar sem carregar ficheiros" em qualquer PC
+inicializarAjustes();          // parâmetros e edições partilhados — aplica o mais recente (local vs servidor)
 </script>
 </body>
 </html>
